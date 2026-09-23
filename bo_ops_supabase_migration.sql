@@ -1,4 +1,4 @@
-export const SUPABASE_SQL_MIGRATION = `-- ==============================================================================
+-- ==============================================================================
 -- SKRIP MIGRASI SUPABASE POSTGRESQL LENGKAP
 -- Sistem: BO-OPS - Pengelolaan Target & Alokasi Biaya Branch Office Edukasi
 -- Fitur: Multi-Zona (Zona 1-13), Multi-Tahun, Gatekeeper Rule Trigger, Formula Otomatis (STORED),
@@ -340,4 +340,3 @@ INSERT INTO public.master_sdm (id, bo_id, nama, jabatan, no_hp, wilayah_kerja, i
 ('a0000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000001', 'SRBaru01 (Sales Rekrutmen Baru)', 'Sales', '-', 'Surabaya Barat & Gresik', true, 'SRBaru01'),
 ('a0000000-0000-0000-0000-000000000005', 'b0000000-0000-0000-0000-000000000001', 'SRDSTB01 (Sales Distributor Eksklusif)', 'Sales', '-', 'Sidoarjo & Mojokerto', true, 'SRDSTB01')
 ON CONFLICT (id) DO NOTHING;
-`;

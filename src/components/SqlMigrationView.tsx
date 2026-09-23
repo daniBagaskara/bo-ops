@@ -115,7 +115,8 @@ export const SqlMigrationView: React.FC = () => {
             <span className="w-3 h-3 rounded-full bg-rose-500 inline-block" />
             <span className="w-3 h-3 rounded-full bg-amber-500 inline-block" />
             <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
-            <span className="text-xs font-mono text-slate-400 ml-2">supabase_migration.sql</span>
+            <span className="text-xs font-mono text-slate-300 ml-2 font-semibold">bo_ops_supabase_migration.sql</span>
+            <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded font-mono">/bo_ops_supabase_migration.sql</span>
           </div>
           <button
             onClick={handleCopy}
