@@ -12,13 +12,18 @@ app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
+  const hasDatabaseUrl = Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
+  const hasSqlDiscrete = Boolean(process.env.SQL_HOST && process.env.SQL_DB_NAME);
+
   res.json({
     status: 'ok',
     service: 'BO-OPS Express Serverless on Vercel',
     timestamp: new Date().toISOString(),
     env: {
+      has_database_url: hasDatabaseUrl,
       has_sql_host: Boolean(process.env.SQL_HOST),
       has_sql_db: Boolean(process.env.SQL_DB_NAME),
+      database_configured: hasDatabaseUrl || hasSqlDiscrete,
     },
   });
 });

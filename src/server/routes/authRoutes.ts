@@ -56,8 +56,13 @@ authRouter.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Email atau kata sandi tidak sesuai.' });
     }
 
-    // Generate session token
-    const token = createSessionToken(user.id);
+    // Generate JWT token
+    const token = createSessionToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      bo_id: user.bo_id,
+    });
 
     return res.json({
       token,
@@ -78,20 +83,24 @@ authRouter.post('/login', async (req, res) => {
 
 // GET /api/auth/me
 authRouter.get('/me', requireAuth, async (req: AuthRequest, res) => {
-  if (!req.appUser) {
-    return res.status(401).json({ error: 'Pengguna tidak ditemukan.' });
-  }
+  try {
+    if (!req.appUser) {
+      return res.status(401).json({ error: 'Sesi tidak ditemukan.' });
+    }
 
-  return res.json({
-    user: {
-      id: req.appUser.id,
-      email: req.appUser.email,
-      nama: req.appUser.nama,
-      role: req.appUser.role,
-      assigned_bo_id: req.appUser.bo_id,
-      assigned_bo_nama: req.appUser.bo_nama,
-    },
-  });
+    return res.json({
+      user: {
+        id: req.appUser.id,
+        email: req.appUser.email,
+        nama: req.appUser.nama,
+        role: req.appUser.role,
+        assigned_bo_id: req.appUser.bo_id,
+        assigned_bo_nama: req.appUser.bo_nama,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Gagal mengambil profil pengguna.' });
+  }
 });
 
 // POST /api/auth/logout
