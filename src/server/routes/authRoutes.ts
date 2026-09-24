@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { db } from '../../db/index.ts';
+import { db, createPool } from '../../db/index.ts';
 import { appUsers, masterBo } from '../../db/schema.ts';
 import { eq } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
@@ -21,37 +21,58 @@ authRouter.post('/login', async (req, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
 
-    // Query user with branch office name
-    const users = await db
-      .select({
-        id: appUsers.id,
-        email: appUsers.email,
-        password_hash: appUsers.password_hash,
-        nama: appUsers.nama,
-        role: appUsers.role,
-        bo_id: appUsers.bo_id,
-        status_aktif: appUsers.status_aktif,
-        bo_nama: masterBo.nama_bo,
-      })
-      .from(appUsers)
-      .leftJoin(masterBo, eq(appUsers.bo_id, masterBo.id))
-      .where(eq(appUsers.email, cleanEmail))
-      .limit(1);
+    // Query directly from PostgreSQL database pool
+    const pool = createPool();
+    const userRes = await pool.query(
+      `SELECT u.id, u.email, 
+              COALESCE(u.password_hash, u.password) AS password_hash,
+              u.nama, u.role, u.bo_id, u.status_aktif, b.nama_bo
+       FROM app_users u
+       LEFT JOIN master_bo b ON u.bo_id = b.id
+       WHERE LOWER(u.email) = $1
+       LIMIT 1`,
+      [cleanEmail]
+    );
 
-    if (users.length === 0) {
+    if (userRes.rows.length === 0) {
       return res.status(401).json({ error: 'Email atau kata sandi tidak sesuai.' });
     }
 
-    const user = users[0];
+    const user = userRes.rows[0];
     if (!user.status_aktif) {
       return res.status(403).json({
         error: 'Akun Anda dinonaktifkan. Silakan hubungi Super Admin Pusat.',
       });
     }
 
-    // Verify bcrypt password
-    const isPasswordValid = await bcrypt.compare(password, user.password_hash);
+    // Verify password:
+    // 1. Check bcrypt hash
+    // 2. Or check direct plaintext match (if account was seeded/registered as plaintext)
+    let isPasswordValid = false;
+    const storedSecret = user.password_hash || '';
+
+    if (storedSecret.startsWith('$2a$') || storedSecret.startsWith('$2b$') || storedSecret.startsWith('$2y$')) {
+      isPasswordValid = await bcrypt.compare(cleanPassword, storedSecret);
+    } else {
+      isPasswordValid = (cleanPassword === storedSecret);
+      // Auto-upgrade plaintext to bcrypt hash
+      if (isPasswordValid) {
+        try {
+          const newHash = await bcrypt.hash(cleanPassword, 10);
+          await pool.query(
+            `UPDATE app_users 
+             SET password_hash = $1 
+             WHERE id = $2`,
+            [newHash, user.id]
+          );
+        } catch {
+          // ignore auto-upgrade fail
+        }
+      }
+    }
+
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Email atau kata sandi tidak sesuai.' });
     }
@@ -72,7 +93,7 @@ authRouter.post('/login', async (req, res) => {
         nama: user.nama,
         role: user.role,
         assigned_bo_id: user.bo_id,
-        assigned_bo_nama: user.bo_nama,
+        assigned_bo_nama: user.nama_bo,
       },
     });
   } catch (error: any) {

@@ -18,11 +18,29 @@ app.get('/api/health', async (_req, res) => {
 
   let dbConnectionStatus = 'not_tested';
   let dbError: string | null = null;
+  let tableChecks: Record<string, any> = {};
 
   try {
     const pool = createPool();
     const result = await pool.query('SELECT NOW() as current_time, current_database() as db_name');
     dbConnectionStatus = 'connected';
+
+    // Verify app_users and existing accounts count
+    try {
+      const userCountRes = await pool.query('SELECT COUNT(*) as total_users FROM app_users');
+      const sampleUsersRes = await pool.query('SELECT email, role, status_aktif FROM app_users LIMIT 5');
+      tableChecks = {
+        app_users_table: 'exists',
+        total_users: Number(userCountRes.rows[0]?.total_users || 0),
+        sample_users: sampleUsersRes.rows,
+      };
+    } catch (tblErr: any) {
+      tableChecks = {
+        app_users_table: 'missing_or_error',
+        error: tblErr.message,
+      };
+    }
+
     return res.json({
       status: 'ok',
       service: 'BO-OPS Express Serverless on Vercel',
@@ -31,6 +49,7 @@ app.get('/api/health', async (_req, res) => {
         status: dbConnectionStatus,
         current_time: result.rows[0]?.current_time,
         db_name: result.rows[0]?.db_name,
+        tables: tableChecks,
       },
       env: {
         has_database_url: hasDatabaseUrl,
