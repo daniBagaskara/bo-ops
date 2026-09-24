@@ -139,27 +139,37 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   };
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-white border-r border-slate-200">
-      {/* Mobile Drawer Header */}
-      <div className="md:hidden flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white">
-            <Layers className="w-4 h-4" />
+    <div className="flex flex-col h-full bg-white">
+      {/* Sidebar Top Brand Header - Always at the top */}
+      <div
+        className={`h-16 flex items-center border-b border-slate-200/80 px-4 shrink-0 transition-all ${
+          isCollapsed ? 'justify-center px-2' : 'justify-between'
+        }`}
+      >
+        <div className="flex items-center gap-3 overflow-hidden">
+          <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-xs shrink-0">
+            <Building2 className="w-5 h-5" />
           </div>
-          <span className="font-bold text-sm text-slate-900">Navigasi Sistem</span>
+          {!isCollapsed && (
+            <span className="text-base font-bold tracking-tight text-slate-900 select-none">
+              BO-OPS
+            </span>
+          )}
         </div>
+
+        {/* Mobile drawer close button */}
         <button
           type="button"
           onClick={onCloseMobile}
-          className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
-          aria-label="Tutup menu"
+          className="md:hidden p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+          aria-label="Tutup menu navigasi"
         >
           <X className="w-5 h-5" />
         </button>
       </div>
 
       {/* Navigation List */}
-      <div className="flex-1 overflow-y-auto py-4 px-3 space-y-6">
+      <div className="flex-1 overflow-y-auto py-5 px-3 space-y-6">
         {menuGroups
           .filter((group) => !group.superAdminOnly || isSuperAdmin)
           .map((group) => {
@@ -172,7 +182,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
               <div key={group.title} className="space-y-1">
                 {/* Group Title */}
                 {!isCollapsed && (
-                  <div className="px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                  <div className="px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
                     {group.title}
                   </div>
                 )}
@@ -192,7 +202,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium transition-all ${
                           isActive
                             ? 'bg-blue-50 text-blue-700 font-semibold border-l-3 border-blue-600 shadow-2xs'
-                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
                         } ${isCollapsed ? 'justify-center px-2' : ''}`}
                       >
                         <Icon
@@ -224,9 +234,9 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
       </div>
 
       {/* Desktop Collapse Toggle Footer */}
-      <div className="hidden md:flex p-3 border-t border-slate-200 bg-slate-50 items-center justify-between">
+      <div className="hidden md:flex p-3 border-t border-slate-200/80 bg-slate-50/70 items-center justify-between">
         {!isCollapsed && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 px-2">
             <Shield className="w-3.5 h-3.5 text-slate-400" />
             <span className="text-[11px] text-slate-500 font-medium">
               {isSuperAdmin ? 'Akses Pusat' : 'Akses Cabang'}
@@ -252,17 +262,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
 
   return (
     <>
-      {/* 1. Desktop Sidebar */}
+      {/* 1. Desktop Sidebar - Sticky full-height */}
       <aside
-        className={`hidden md:block shrink-0 transition-all duration-200 ease-in-out ${
+        className={`hidden md:flex flex-col sticky top-0 h-screen shrink-0 border-r border-slate-200/80 bg-white transition-all duration-200 ease-in-out z-20 ${
           isCollapsed ? 'w-16' : 'w-64'
         }`}
       >
-        <div className="fixed top-16 bottom-0 z-20 transition-all duration-200 ease-in-out">
-          <div className={`h-full ${isCollapsed ? 'w-16' : 'w-64'}`}>
-            {sidebarContent}
-          </div>
-        </div>
+        {sidebarContent}
       </aside>
 
       {/* 2. Mobile Drawer Backdrop & Container */}
@@ -270,12 +276,12 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         <div className="fixed inset-0 z-40 md:hidden flex">
           {/* Backdrop */}
           <div
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity"
             onClick={onCloseMobile}
           />
 
           {/* Drawer Panel */}
-          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white z-50 animate-in slide-in-from-left duration-200 shadow-xl">
+          <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white z-50 animate-in slide-in-from-left duration-200 shadow-xl border-r border-slate-200">
             {sidebarContent}
           </div>
         </div>

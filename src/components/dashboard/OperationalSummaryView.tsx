@@ -80,11 +80,11 @@ export const OperationalSummaryView: React.FC<OperationalSummaryViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Welcome Banner */}
-      <div className="rounded-2xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-6 shadow-md relative overflow-hidden">
+      <div className="rounded-2xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white p-7 sm:p-8 shadow-sm relative overflow-hidden">
         <div className="relative z-10 max-w-2xl">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-200 text-xs font-semibold mb-3 border border-blue-400/30">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-200 text-xs font-semibold mb-3.5 border border-blue-400/30">
             <Sparkles className="w-3.5 h-3.5 text-blue-300" />
             {isSuperAdmin
               ? 'Konsol Operasional Nasional'
@@ -93,13 +93,13 @@ export const OperationalSummaryView: React.FC<OperationalSummaryViewProps> = ({
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
             Selamat Datang, {currentUser.nama}
           </h2>
-          <p className="text-xs sm:text-sm text-slate-300 mt-1 leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-300 mt-2 leading-relaxed">
             {isSuperAdmin
               ? 'Kelola alokasi target penjualan buku, jaringan cabang, tim sales, dan mitra sekolah secara terpusat dan terintegrasi.'
               : `Kelola dan pantau realisasi target penjualan buku dan kinerja tim sales untuk wilayah ${activeBo?.wilayah || 'cabang'}.`}
           </p>
 
-          <div className="mt-4 flex flex-wrap gap-2.5">
+          <div className="mt-5 flex flex-wrap gap-3">
             <button
               type="button"
               onClick={() => onNavigate('target_operasional')}
@@ -127,123 +127,123 @@ export const OperationalSummaryView: React.FC<OperationalSummaryViewProps> = ({
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
         {/* Card 1: Nilai Brutto Target */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-medium">Total Target Brutto</span>
-            <div className="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+        <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/80 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-500 mb-3">
+            <span className="text-xs font-medium text-slate-500">Total Target Brutto</span>
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
               <Target className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-lg font-bold text-slate-900">{formatIDR(totalBrutto)}</div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {displayTargets.length} alokasi penjualan ({totalQty.toLocaleString('id-ID')} eksemplar)
+          <div className="text-xl font-bold text-slate-900">{formatIDR(totalBrutto)}</div>
+          <p className="text-xs text-slate-500 mt-1.5">
+            {displayTargets.length} alokasi ({totalQty.toLocaleString('id-ID')} eks)
           </p>
         </div>
 
         {/* Card 2: Proyeksi Tertimbang */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-medium">Proyeksi Tertimbang</span>
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+        <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/80 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-500 mb-3">
+            <span className="text-xs font-medium text-slate-500">Proyeksi Tertimbang</span>
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-lg font-bold text-slate-900">{formatIDR(totalTertimbang)}</div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            Disesuaikan dengan tingkat keyakinan sales
+          <div className="text-xl font-bold text-slate-900">{formatIDR(totalTertimbang)}</div>
+          <p className="text-xs text-slate-500 mt-1.5">
+            Tingkat keyakinan alokasi sales
           </p>
         </div>
 
         {/* Card 3: Nilai Netto & Rabat */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-medium">Estimasi Nilai Netto</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+        <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/80 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-500 mb-3">
+            <span className="text-xs font-medium text-slate-500">Estimasi Nilai Netto</span>
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <Award className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-lg font-bold text-emerald-700">{formatIDR(totalNetto)}</div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            Potensi Laba Kotor: {formatIDR(totalLabaKotor)}
+          <div className="text-xl font-bold text-emerald-700">{formatIDR(totalNetto)}</div>
+          <p className="text-xs text-slate-500 mt-1.5">
+            Laba Kotor: {formatIDR(totalLabaKotor)}
           </p>
         </div>
 
         {/* Card 4: Sumber Daya & Mitra */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-medium">
+        <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200/80 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-500 mb-3">
+            <span className="text-xs font-medium text-slate-500">
               {isSuperAdmin ? 'Cakupan Nasional' : 'Kekuatan Cabang'}
             </span>
-            <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
               <Users className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-lg font-bold text-slate-900">
+          <div className="text-xl font-bold text-slate-900">
             {displaySdm.length} <span className="text-xs font-normal text-slate-500">Personil</span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {displayRelasi.length} Mitra Relasi & Sekolah binaan
+          <p className="text-xs text-slate-500 mt-1.5">
+            {displayRelasi.length} Mitra Relasi aktif
           </p>
         </div>
       </div>
 
       {/* Operational Fast Links for Super Admin */}
       {isSuperAdmin && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+        <div className="bg-white rounded-xl border border-slate-200/80 p-6 sm:p-7 shadow-2xs">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">
             Pusat Pengelolaan Data Master
           </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
             <button
               type="button"
               onClick={() => onNavigate('master_bo')}
-              className="p-3.5 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 text-left transition-all group"
+              className="p-4 rounded-xl border border-slate-200/90 hover:border-blue-400 hover:bg-blue-50/40 text-left transition-all group shadow-2xs"
             >
-              <Building2 className="w-5 h-5 text-blue-600 mb-2 group-hover:scale-110 transition-transform" />
+              <Building2 className="w-5 h-5 text-blue-600 mb-2.5 group-hover:scale-105 transition-transform" />
               <div className="text-xs font-bold text-slate-900">Master BO</div>
-              <div className="text-[11px] text-slate-500">{branchOffices.length} Kantor Cabang</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">{branchOffices.length} Kantor Cabang</div>
             </button>
 
             <button
               type="button"
               onClick={() => onNavigate('master_sdm')}
-              className="p-3.5 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 text-left transition-all group"
+              className="p-4 rounded-xl border border-slate-200/90 hover:border-blue-400 hover:bg-blue-50/40 text-left transition-all group shadow-2xs"
             >
-              <Users className="w-5 h-5 text-indigo-600 mb-2 group-hover:scale-110 transition-transform" />
+              <Users className="w-5 h-5 text-indigo-600 mb-2.5 group-hover:scale-105 transition-transform" />
               <div className="text-xs font-bold text-slate-900">SDM & Sales</div>
-              <div className="text-[11px] text-slate-500">{sdmList.length} Personil</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">{sdmList.length} Personil</div>
             </button>
 
             <button
               type="button"
               onClick={() => onNavigate('master_relasi')}
-              className="p-3.5 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 text-left transition-all group"
+              className="p-4 rounded-xl border border-slate-200/90 hover:border-blue-400 hover:bg-blue-50/40 text-left transition-all group shadow-2xs"
             >
-              <Building className="w-5 h-5 text-emerald-600 mb-2 group-hover:scale-110 transition-transform" />
+              <Building className="w-5 h-5 text-emerald-600 mb-2.5 group-hover:scale-105 transition-transform" />
               <div className="text-xs font-bold text-slate-900">Mitra Relasi</div>
-              <div className="text-[11px] text-slate-500">{relasiList.length} Sekolah & Mitra</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">{relasiList.length} Sekolah & Mitra</div>
             </button>
 
             <button
               type="button"
               onClick={() => onNavigate('master_produk')}
-              className="p-3.5 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 text-left transition-all group"
+              className="p-4 rounded-xl border border-slate-200/90 hover:border-blue-400 hover:bg-blue-50/40 text-left transition-all group shadow-2xs"
             >
-              <BookOpen className="w-5 h-5 text-amber-600 mb-2 group-hover:scale-110 transition-transform" />
+              <BookOpen className="w-5 h-5 text-amber-600 mb-2.5 group-hover:scale-105 transition-transform" />
               <div className="text-xs font-bold text-slate-900">Katalog Buku</div>
-              <div className="text-[11px] text-slate-500">{produkList.length} Judul SKU</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">{produkList.length} Judul SKU</div>
             </button>
 
             <button
               type="button"
               onClick={() => onNavigate('target_operasional')}
-              className="p-3.5 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 text-left transition-all group"
+              className="p-4 rounded-xl border border-slate-200/90 hover:border-blue-400 hover:bg-blue-50/40 text-left transition-all group shadow-2xs"
             >
-              <Target className="w-5 h-5 text-rose-600 mb-2 group-hover:scale-110 transition-transform" />
+              <Target className="w-5 h-5 text-rose-600 mb-2.5 group-hover:scale-105 transition-transform" />
               <div className="text-xs font-bold text-slate-900">Target Detail</div>
-              <div className="text-[11px] text-slate-500">{targetList.length} Target Aktif</div>
+              <div className="text-[11px] text-slate-500 mt-0.5">{targetList.length} Target Aktif</div>
             </button>
           </div>
         </div>
