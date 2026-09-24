@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import {
+  UserProfile,
   MasterBO,
   MasterSDM,
   MasterRelasi,
@@ -7,748 +8,738 @@ import {
   MasterProdukHarga,
   TargetPenjualanDetail,
   AppUser,
-  UserRole,
-  PaginationParams,
-  PaginatedResult,
+  ImportTableType,
+  ImportMode,
+  ImportJobReport,
+  ImportRowError,
 } from '../types';
 
-export interface DbStatus {
-  connected: boolean;
-  message: string;
-  counts: {
-    bo: number;
-    sdm: number;
-    relasi: number;
-    produk: number;
-    harga: number;
-    target: number;
-  };
-}
+const SESSION_KEY = 'bo_ops_current_user';
 
 export const supabaseService = {
-  // Test connection and count records in each table
-  async checkConnection(): Promise<DbStatus> {
-    try {
-      const results = await Promise.allSettled([
-        supabase.from('master_bo').select('id', { count: 'exact', head: true }),
-        supabase.from('master_sdm').select('id', { count: 'exact', head: true }),
-        supabase.from('master_relasi').select('id', { count: 'exact', head: true }),
-        supabase.from('master_produk').select('id', { count: 'exact', head: true }),
-        supabase.from('master_produk_harga').select('id', { count: 'exact', head: true }),
-        supabase.from('target_penjualan_detail').select('id', { count: 'exact', head: true }),
-      ]);
+  // ==========================================
+  // 1. AUTENTIKASI & SESI PENGGUNA
+  // ==========================================
+  async login(email: string, password: string): Promise<UserProfile> {
+    const cleanEmail = email.trim().toLowerCase();
 
-      const counts = {
-        bo: results[0].status === 'fulfilled' && results[0].value.count !== null ? results[0].value.count : 0,
-        sdm: results[1].status === 'fulfilled' && results[1].value.count !== null ? results[1].value.count : 0,
-        relasi: results[2].status === 'fulfilled' && results[2].value.count !== null ? results[2].value.count : 0,
-        produk: results[3].status === 'fulfilled' && results[3].value.count !== null ? results[3].value.count : 0,
-        harga: results[4].status === 'fulfilled' && results[4].value.count !== null ? results[4].value.count : 0,
-        target: results[5].status === 'fulfilled' && results[5].value.count !== null ? results[5].value.count : 0,
-      };
+    // Query dari tabel app_users di Supabase
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('id, email, password, nama, role, bo_id, status_aktif')
+      .eq('email', cleanEmail)
+      .limit(1);
 
-      const hasError = results.some(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error));
-      const firstError = results.find(r => r.status === 'fulfilled' && r.value.error);
-
-      return {
-        connected: !hasError || counts.bo > 0 || counts.sdm > 0,
-        message: firstError && (firstError as any).value?.error?.message ? (firstError as any).value.error.message : 'Terhubung ke Supabase',
-        counts,
-      };
-    } catch (err: any) {
-      return {
-        connected: false,
-        message: err?.message || 'Gagal menghubungi server Supabase',
-        counts: { bo: 0, sdm: 0, relasi: 0, produk: 0, harga: 0, target: 0 },
-      };
+    if (error) {
+      console.error('Supabase user lookup error:', error);
+      throw new Error(`Gagal menghubungi database Supabase: ${error.message}`);
     }
-  },
 
-  // CLEAR ALL DATA IN DATABASE
-  async clearAllData(): Promise<{ success: boolean; error?: string; cleared: Record<string, number> }> {
-    const cleared: Record<string, number> = {
-      target_penjualan_detail: 0,
-      master_produk_harga: 0,
-      master_relasi: 0,
-      master_sdm: 0,
-      master_produk: 0,
-      master_bo: 0,
+    if (!data || data.length === 0) {
+      throw new Error('Email atau kata sandi tidak sesuai.');
+    }
+
+    const user = data[0];
+
+    // Verifikasi password (plaintext atau hash)
+    if (user.password !== password.trim()) {
+      throw new Error('Email atau kata sandi tidak sesuai.');
+    }
+
+    if (!user.status_aktif) {
+      throw new Error('Akun Anda dinonaktifkan. Silakan hubungi Super Admin Pusat.');
+    }
+
+    let boNama: string | undefined = undefined;
+    if (user.bo_id) {
+      const { data: boData } = await supabase
+        .from('master_bo')
+        .select('nama_bo')
+        .eq('id', user.bo_id)
+        .single();
+      boNama = boData?.nama_bo;
+    }
+
+    const profile: UserProfile = {
+      id: user.id,
+      nama: user.nama,
+      email: user.email,
+      role: user.role,
+      assigned_bo_id: user.bo_id || undefined,
+      assigned_bo_nama: boNama,
     };
 
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(profile));
+    return profile;
+  },
+
+  getCurrentUser(): UserProfile | null {
+    const saved = sessionStorage.getItem(SESSION_KEY);
+    if (!saved) return null;
     try {
-      // 1. target_penjualan_detail (child table)
-      const resTarget = await supabase.from('target_penjualan_detail').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      if (resTarget.error) throw new Error(`target_penjualan_detail: ${resTarget.error.message}`);
-
-      // 2. master_produk_harga
-      const resHarga = await supabase.from('master_produk_harga').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      if (resHarga.error) throw new Error(`master_produk_harga: ${resHarga.error.message}`);
-
-      // 3. master_relasi
-      const resRelasi = await supabase.from('master_relasi').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      if (resRelasi.error) throw new Error(`master_relasi: ${resRelasi.error.message}`);
-
-      // 4. master_sdm
-      const resSdm = await supabase.from('master_sdm').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      if (resSdm.error) throw new Error(`master_sdm: ${resSdm.error.message}`);
-
-      // 5. master_produk
-      const resProduk = await supabase.from('master_produk').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      if (resProduk.error) throw new Error(`master_produk: ${resProduk.error.message}`);
-
-      // 6. master_bo
-      const resBo = await supabase.from('master_bo').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      if (resBo.error) throw new Error(`master_bo: ${resBo.error.message}`);
-
-      return { success: true, cleared };
-    } catch (err: any) {
-      console.error('Error clearing database:', err);
-      return { success: false, error: err.message, cleared };
+      return JSON.parse(saved);
+    } catch {
+      return null;
     }
   },
 
-  // 1. MASTER BO CRUD
-  async getMasterBO(): Promise<MasterBO[]> {
+  logout(): void {
+    sessionStorage.removeItem(SESSION_KEY);
+  },
+
+  // ==========================================
+  // 2. MASTER BRANCH OFFICE (BO)
+  // ==========================================
+  async getMasterBo(): Promise<MasterBO[]> {
     const { data, error } = await supabase
       .from('master_bo')
       .select('*')
       .order('nama_bo', { ascending: true });
-    if (error) throw error;
-    return (data || []) as MasterBO[];
+
+    if (error) throw new Error(error.message);
+    return data || [];
   },
 
-  async insertMasterBO(record: Omit<MasterBO, 'id' | 'created_at'>): Promise<MasterBO> {
+  async createMasterBo(bo: Omit<MasterBO, 'id' | 'created_at'>): Promise<MasterBO> {
     const { data, error } = await supabase
       .from('master_bo')
-      .insert([record])
+      .insert([bo])
       .select()
       .single();
-    if (error) throw error;
-    return data as MasterBO;
+
+    if (error) throw new Error(error.message);
+    return data;
   },
 
-  async updateMasterBO(id: string, record: Partial<MasterBO>): Promise<MasterBO> {
+  async updateMasterBo(id: string, bo: Partial<MasterBO>): Promise<MasterBO> {
     const { data, error } = await supabase
       .from('master_bo')
-      .update(record)
+      .update(bo)
       .eq('id', id)
       .select()
       .single();
-    if (error) throw error;
-    return data as MasterBO;
+
+    if (error) throw new Error(error.message);
+    return data;
   },
 
-  async deleteMasterBO(id: string): Promise<void> {
+  async deleteMasterBo(id: string): Promise<void> {
     const { error } = await supabase.from('master_bo').delete().eq('id', id);
-    if (error) throw error;
+    if (error) throw new Error(error.message);
   },
 
-  // 2. MASTER SDM CRUD
-  async getMasterSDM(): Promise<MasterSDM[]> {
-    const { data, error } = await supabase
-      .from('master_sdm')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []) as MasterSDM[];
+  // ==========================================
+  // 3. MASTER SDM & SALES
+  // ==========================================
+  async getMasterSdm(boId?: string): Promise<MasterSDM[]> {
+    let query = supabase.from('master_sdm').select('*');
+    if (boId) {
+      query = query.eq('bo_id', boId);
+    }
+    const { data, error } = await query.order('nama', { ascending: true });
+
+    if (error) throw new Error(error.message);
+    return data || [];
   },
 
-  async insertMasterSDM(record: Omit<MasterSDM, 'id' | 'created_at'>): Promise<MasterSDM> {
+  async createMasterSdm(sdm: Omit<MasterSDM, 'id' | 'created_at'>): Promise<MasterSDM> {
     const { data, error } = await supabase
       .from('master_sdm')
-      .insert([record])
+      .insert([sdm])
       .select()
       .single();
-    if (error) throw error;
-    return data as MasterSDM;
+
+    if (error) throw new Error(error.message);
+    return data;
   },
 
-  async updateMasterSDM(id: string, record: Partial<MasterSDM>): Promise<MasterSDM> {
+  async updateMasterSdm(id: string, sdm: Partial<MasterSDM>): Promise<MasterSDM> {
     const { data, error } = await supabase
       .from('master_sdm')
-      .update(record)
+      .update(sdm)
       .eq('id', id)
       .select()
       .single();
-    if (error) throw error;
-    return data as MasterSDM;
+
+    if (error) throw new Error(error.message);
+    return data;
   },
 
-  async deleteMasterSDM(id: string): Promise<void> {
+  async deleteMasterSdm(id: string): Promise<void> {
     const { error } = await supabase.from('master_sdm').delete().eq('id', id);
-    if (error) throw error;
+    if (error) throw new Error(error.message);
   },
 
-  // 3. MASTER RELASI CRUD
-  async getMasterRelasi(): Promise<MasterRelasi[]> {
-    const { data, error } = await supabase
-      .from('master_relasi')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []) as MasterRelasi[];
+  // ==========================================
+  // 4. MASTER RELASI
+  // ==========================================
+  async getMasterRelasi(boId?: string): Promise<MasterRelasi[]> {
+    let query = supabase.from('master_relasi').select('*');
+    if (boId) {
+      query = query.eq('bo_id', boId);
+    }
+    const { data, error } = await query.order('nama_relasi', { ascending: true });
+
+    if (error) throw new Error(error.message);
+    return data || [];
   },
 
-  async insertMasterRelasi(record: Omit<MasterRelasi, 'id' | 'created_at'>): Promise<MasterRelasi> {
+  async createMasterRelasi(
+    relasi: Omit<MasterRelasi, 'id' | 'created_at'>
+  ): Promise<MasterRelasi> {
     const { data, error } = await supabase
       .from('master_relasi')
-      .insert([record])
+      .insert([relasi])
       .select()
       .single();
-    if (error) throw error;
-    return data as MasterRelasi;
+
+    if (error) throw new Error(error.message);
+    return data;
   },
 
-  async updateMasterRelasi(id: string, record: Partial<MasterRelasi>): Promise<MasterRelasi> {
+  async updateMasterRelasi(
+    id: string,
+    relasi: Partial<MasterRelasi>
+  ): Promise<MasterRelasi> {
     const { data, error } = await supabase
       .from('master_relasi')
-      .update(record)
+      .update(relasi)
       .eq('id', id)
       .select()
       .single();
-    if (error) throw error;
-    return data as MasterRelasi;
+
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   async deleteMasterRelasi(id: string): Promise<void> {
     const { error } = await supabase.from('master_relasi').delete().eq('id', id);
-    if (error) throw error;
+    if (error) throw new Error(error.message);
   },
 
-  // 4. MASTER PRODUK CRUD
+  // ==========================================
+  // 5. MASTER PRODUK
+  // ==========================================
   async getMasterProduk(): Promise<MasterProduk[]> {
     const { data, error } = await supabase
       .from('master_produk')
       .select('*')
       .order('kode_sku', { ascending: true });
-    if (error) throw error;
-    return (data || []) as MasterProduk[];
+
+    if (error) throw new Error(error.message);
+    return data || [];
   },
 
-  async insertMasterProduk(record: Omit<MasterProduk, 'id' | 'created_at'>): Promise<MasterProduk> {
+  async createMasterProduk(
+    produk: Omit<MasterProduk, 'id' | 'created_at'>
+  ): Promise<MasterProduk> {
     const { data, error } = await supabase
       .from('master_produk')
-      .insert([record])
+      .insert([produk])
       .select()
       .single();
-    if (error) throw error;
-    return data as MasterProduk;
+
+    if (error) throw new Error(error.message);
+    return data;
   },
 
-  async updateMasterProduk(id: string, record: Partial<MasterProduk>): Promise<MasterProduk> {
+  async updateMasterProduk(
+    id: string,
+    produk: Partial<MasterProduk>
+  ): Promise<MasterProduk> {
     const { data, error } = await supabase
       .from('master_produk')
-      .update(record)
+      .update(produk)
       .eq('id', id)
       .select()
       .single();
-    if (error) throw error;
-    return data as MasterProduk;
+
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   async deleteMasterProduk(id: string): Promise<void> {
     const { error } = await supabase.from('master_produk').delete().eq('id', id);
-    if (error) throw error;
+    if (error) throw new Error(error.message);
   },
 
-  // 5. MASTER PRODUK HARGA CRUD
-  async getMasterProdukHarga(): Promise<MasterProdukHarga[]> {
+  // ==========================================
+  // 6. MATRIKS HARGA PRODUK (MULTI-ZONA 1-13)
+  // ==========================================
+  async getMasterProdukHarga(tahun?: number, zona?: number): Promise<MasterProdukHarga[]> {
+    let query = supabase.from('master_produk_harga').select('*');
+    if (tahun) query = query.eq('tahun_anggaran', tahun);
+    if (zona) query = query.eq('zona_id', zona);
+
+    const { data, error } = await query;
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async upsertMasterProdukHarga(
+    items: Omit<MasterProdukHarga, 'id'>[]
+  ): Promise<MasterProdukHarga[]> {
     const { data, error } = await supabase
       .from('master_produk_harga')
-      .select('*')
-      .order('tahun_anggaran', { ascending: false });
-    if (error) throw error;
-    return (data || []) as MasterProdukHarga[];
+      .upsert(items, { onConflict: 'produk_id,tahun_anggaran,zona_id' })
+      .select();
+
+    if (error) throw new Error(error.message);
+    return data || [];
   },
 
-  async insertMasterProdukHarga(record: Omit<MasterProdukHarga, 'id'>): Promise<MasterProdukHarga> {
-    const { data, error } = await supabase
-      .from('master_produk_harga')
-      .insert([record])
-      .select()
-      .single();
-    if (error) throw error;
-    return data as MasterProdukHarga;
-  },
-
-  async updateMasterProdukHarga(id: string, record: Partial<MasterProdukHarga>): Promise<MasterProdukHarga> {
-    const { data, error } = await supabase
-      .from('master_produk_harga')
-      .update(record)
-      .eq('id', id)
-      .select()
-      .single();
-    if (error) throw error;
-    return data as MasterProdukHarga;
-  },
-
-  async deleteMasterProdukHarga(id: string): Promise<void> {
-    const { error } = await supabase.from('master_produk_harga').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  // 6. TARGET PENJUALAN DETAIL CRUD
-  async getTargetPenjualanDetail(): Promise<TargetPenjualanDetail[]> {
-    const { data, error } = await supabase
-      .from('target_penjualan_detail')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data || []) as TargetPenjualanDetail[];
-  },
-
-  async insertTargetPenjualanDetail(record: any): Promise<TargetPenjualanDetail> {
-    const { data, error } = await supabase
-      .from('target_penjualan_detail')
-      .insert([record])
-      .select()
-      .single();
-    if (error) throw error;
-    return data as TargetPenjualanDetail;
-  },
-
-  async updateTargetPenjualanDetail(id: string, record: Partial<TargetPenjualanDetail>): Promise<TargetPenjualanDetail> {
-    const { data, error } = await supabase
-      .from('target_penjualan_detail')
-      .update(record)
-      .eq('id', id)
-      .select()
-      .single();
-    if (error) throw error;
-    return data as TargetPenjualanDetail;
-  },
-
-  async deleteTargetPenjualanDetail(id: string): Promise<void> {
-    const { error } = await supabase.from('target_penjualan_detail').delete().eq('id', id);
-    if (error) throw error;
-  },
-
-  // 7. APP USERS & AUTHENTICATION CRUD
-  async loginUser(emailInput: string, passwordInput: string): Promise<{ user: any; error?: string }> {
-    const cleanEmail = emailInput.trim().toLowerCase();
-    const cleanPass = passwordInput.trim();
-
-    try {
-      // 1. Try querying app_users table in Supabase
-      const { data, error } = await supabase
-        .from('app_users')
-        .select('*')
-        .eq('email', cleanEmail)
-        .eq('password', cleanPass)
-        .single();
-
-      if (!error && data) {
-        return {
-          user: {
-            id: data.id,
-            email: data.email,
-            nama: data.nama,
-            role: data.role,
-            assigned_bo_id: data.bo_id,
-          },
-        };
-      }
-    } catch {
-      // ignore network or missing table error to allow fallback
-    }
-
-    // 2. Fallback to default credentials if migration hasn't been executed yet
-    if (cleanEmail === 'superadmin@edubranch.id' && cleanPass === 'admin123') {
-      return {
-        user: {
-          id: 'usr-superadmin-01',
-          email: 'superadmin@edubranch.id',
-          nama: 'Superadmin Pusat',
-          role: 'superadmin',
-        },
-      };
-    }
-
-    if (cleanEmail === 'bm.surabaya@edubranch.id' && cleanPass === 'bm123') {
-      return {
-        user: {
-          id: 'usr-bm-sby-01',
-          email: 'bm.surabaya@edubranch.id',
-          nama: 'Ahmad Fauzi, S.Pd.',
-          role: 'branch_manager',
-          assigned_bo_id: 'b0000000-0000-0000-0000-000000000001',
-          assigned_bo_nama: 'Branch Office Surabaya (Zona 2)',
-        },
-      };
-    }
-
-    // 3. Fallback to localStorage registered users
-    try {
-      const localUsersStr = localStorage.getItem('edubranch_app_users_v1');
-      if (localUsersStr) {
-        const localUsers = JSON.parse(localUsersStr);
-        const match = localUsers.find(
-          (u: any) => u.email.toLowerCase() === cleanEmail && u.password === cleanPass
-        );
-        if (match) {
-          return {
-            user: {
-              id: match.id,
-              email: match.email,
-              nama: match.nama,
-              role: match.role,
-              assigned_bo_id: match.bo_id,
-            },
-          };
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    return { user: null, error: 'Email atau kata sandi tidak cocok.' };
-  },
-
-  async registerUser(userData: {
-    email: string;
-    password: string;
-    nama: string;
-    role: 'superadmin' | 'branch_manager';
-    bo_id?: string | null;
-  }): Promise<{ user: any; error?: string }> {
-    const cleanEmail = userData.email.trim().toLowerCase();
-
-    // 1. Save to Supabase app_users table if available
-    try {
-      const { data, error } = await supabase
-        .from('app_users')
-        .insert([
-          {
-            email: cleanEmail,
-            password: userData.password.trim(),
-            nama: userData.nama.trim(),
-            role: userData.role,
-            bo_id: userData.bo_id || null,
-          },
-        ])
-        .select()
-        .single();
-
-      if (!error && data) {
-        return {
-          user: {
-            id: data.id,
-            email: data.email,
-            nama: data.nama,
-            role: data.role,
-            assigned_bo_id: data.bo_id,
-          },
-        };
-      }
-    } catch {
-      // ignore
-    }
-
-    // 2. Save locally as fallback
-    const newUser = {
-      id: `usr-${Date.now()}`,
-      email: cleanEmail,
-      password: userData.password.trim(),
-      nama: userData.nama.trim(),
-      role: userData.role,
-      bo_id: userData.bo_id || null,
+  // ==========================================
+  // 7. TARGET PENJUALAN DETAIL (OPERASIONAL & FORMULA)
+  // ==========================================
+  async getTargetPenjualan(params: {
+    page?: number;
+    limit?: number;
+    boId?: string;
+    tahun?: number;
+    sdmId?: string;
+    search?: string;
+  }): Promise<{
+    data: TargetPenjualanDetail[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    summary: {
+      totalBrutto: number;
+      totalNetto: number;
+      totalLaba: number;
+      totalTertimbang: number;
+      totalQty: number;
     };
+  }> {
+    const page = params.page || 1;
+    const limit = params.limit || 25;
+    const offset = (page - 1) * limit;
 
-    try {
-      const existingStr = localStorage.getItem('edubranch_app_users_v1');
-      const existing = existingStr ? JSON.parse(existingStr) : [];
-      existing.push(newUser);
-      localStorage.setItem('edubranch_app_users_v1', JSON.stringify(existing));
-    } catch {
-      // ignore
+    let query = supabase.from('target_penjualan_detail').select(
+      `
+      *,
+      master_bo:bo_id (nama_bo, kode_bo),
+      master_sdm:sdm_id (nama),
+      master_relasi:relasi_id (nama_relasi, kode_relasi),
+      master_produk:produk_id (judul_buku, kode_sku)
+      `,
+      { count: 'exact' }
+    );
+
+    // Filter BO (Isolasi data BM)
+    const currentUser = this.getCurrentUser();
+    if (currentUser?.role === 'branch_manager' && currentUser.assigned_bo_id) {
+      query = query.eq('bo_id', currentUser.assigned_bo_id);
+    } else if (params.boId && params.boId !== 'all') {
+      query = query.eq('bo_id', params.boId);
     }
 
+    if (params.tahun) {
+      query = query.eq('tahun_anggaran', params.tahun);
+    }
+
+    if (params.sdmId) {
+      query = query.eq('sdm_id', params.sdmId);
+    }
+
+    const { data, count, error } = await query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw new Error(error.message);
+
+    // Format joined records
+    const formatted: TargetPenjualanDetail[] = (data || []).map((row: any) => ({
+      id: row.id,
+      bo_id: row.bo_id,
+      sdm_id: row.sdm_id,
+      relasi_id: row.relasi_id,
+      produk_id: row.produk_id,
+      tahun_anggaran: row.tahun_anggaran,
+      zona_id: row.zona_id,
+      harga_satuan: Number(row.harga_satuan),
+      qty: Number(row.qty),
+      persen_keyakinan: Number(row.persen_keyakinan),
+      persen_rabat: Number(row.persen_rabat),
+      persen_bsr: Number(row.persen_bsr),
+      persen_hpp: Number(row.persen_hpp),
+      nilai_brutto: Number(row.nilai_brutto),
+      nilai_rabat: Number(row.nilai_rabat),
+      nilai_bsr: Number(row.nilai_bsr),
+      nilai_netto: Number(row.nilai_netto),
+      nilai_hpp: Number(row.nilai_hpp),
+      laba_kotor: Number(row.laba_kotor),
+      nilai_tertimbang_brutto: Number(row.nilai_tertimbang_brutto),
+      catatan: row.catatan,
+      created_at: row.created_at,
+      bo_nama: row.master_bo?.nama_bo,
+      bo_kode: row.master_bo?.kode_bo,
+      sdm_nama: row.master_sdm?.nama,
+      relasi_nama: row.master_relasi?.nama_relasi,
+      relasi_kode: row.master_relasi?.kode_relasi,
+      produk_judul: row.master_produk?.judul_buku,
+      produk_sku: row.master_produk?.kode_sku,
+    }));
+
+    // Summary calculation
+    const summary = formatted.reduce(
+      (acc, cur) => ({
+        totalBrutto: acc.totalBrutto + cur.nilai_brutto,
+        totalNetto: acc.totalNetto + cur.nilai_netto,
+        totalLaba: acc.totalLaba + cur.laba_kotor,
+        totalTertimbang: acc.totalTertimbang + cur.nilai_tertimbang_brutto,
+        totalQty: acc.totalQty + cur.qty,
+      }),
+      {
+        totalBrutto: 0,
+        totalNetto: 0,
+        totalLaba: 0,
+        totalTertimbang: 0,
+        totalQty: 0,
+      }
+    );
+
+    const total = count || 0;
     return {
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        nama: newUser.nama,
-        role: newUser.role,
-        assigned_bo_id: newUser.bo_id,
-      },
+      data: formatted,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 1,
+      summary,
     };
   },
 
-  // 7. APP USERS CRUD (Super Admin)
-  async getAppUsers(): Promise<AppUser[]> {
-    try {
-      const { data, error } = await supabase
-        .from('app_users')
-        .select(`
-          id,
-          email,
-          nama,
-          role,
-          bo_id,
-          status_aktif,
-          created_at,
-          updated_at,
-          master_bo (
-            nama_bo
-          )
-        `)
-        .order('created_at', { ascending: false });
+  async createTargetPenjualan(
+    payload: Omit<
+      TargetPenjualanDetail,
+      | 'id'
+      | 'nilai_brutto'
+      | 'nilai_rabat'
+      | 'nilai_bsr'
+      | 'nilai_netto'
+      | 'nilai_hpp'
+      | 'laba_kotor'
+      | 'nilai_tertimbang_brutto'
+      | 'created_at'
+    >
+  ): Promise<TargetPenjualanDetail> {
+    // 1. Gatekeeper Rule Check: Cabang WAJIB memiliki SDM aktif sebelum menginput target
+    const { count: sdmCount, error: sdmErr } = await supabase
+      .from('master_sdm')
+      .select('id', { count: 'exact', head: true })
+      .eq('bo_id', payload.bo_id)
+      .eq('status_aktif', true);
 
-      if (!error && data && data.length > 0) {
-        return data.map((u: any) => ({
-          id: u.id,
-          email: u.email,
-          nama: u.nama,
-          role: u.role,
-          bo_id: u.bo_id,
-          bo_nama: u.master_bo?.nama_bo || (u.role === 'branch_manager' ? 'Branch Office Surabaya' : undefined),
-          status_aktif: u.status_aktif ?? true,
-          created_at: u.created_at,
-          updated_at: u.updated_at,
-        }));
-      }
-    } catch {
-      // ignore
+    if (sdmErr) throw new Error(sdmErr.message);
+
+    if (!sdmCount || sdmCount === 0) {
+      throw new Error(
+        'ATURAN GATEKEEPER: Anda belum dapat menginput data target penjualan sebelum mendaftarkan SDM / Karyawan pada cabang ini.'
+      );
     }
 
-    // Fallback seed users
-    const localUsersStr = localStorage.getItem('edubranch_app_users_v1');
-    const localUsers: any[] = localUsersStr ? JSON.parse(localUsersStr) : [];
+    // 2. Hitung Formula Finansial Presisi
+    const qty = Number(payload.qty) || 0;
+    const hargaSatuan = Number(payload.harga_satuan) || 0;
+    const persenKeyakinan = Number(payload.persen_keyakinan) || 0;
+    const persenRabat = Number(payload.persen_rabat) || 0;
+    const persenBsr = Number(payload.persen_bsr) || 0;
+    const persenHpp = Number(payload.persen_hpp) || 0;
 
-    const defaultUsers: AppUser[] = [
-      {
-        id: 'usr-superadmin-01',
-        email: 'superadmin@edubranch.id',
-        nama: 'Superadmin Pusat',
-        role: 'superadmin',
-        bo_id: null,
-        status_aktif: true,
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'usr-bm-sby-01',
-        email: 'bm.surabaya@edubranch.id',
-        nama: 'Ahmad Fauzi, S.Pd.',
-        role: 'branch_manager',
-        bo_id: 'b0000000-0000-0000-0000-000000000001',
-        bo_nama: 'Branch Office Surabaya (Zona 2)',
-        status_aktif: true,
-        created_at: new Date().toISOString(),
-      },
-    ];
+    const nilaiBrutto = Math.round(qty * hargaSatuan * 100) / 100;
+    const nilaiRabat = Math.round(nilaiBrutto * (persenRabat / 100) * 100) / 100;
+    const nilaiBsr = Math.round(nilaiBrutto * (persenBsr / 100) * 100) / 100;
+    const nilaiNetto = Math.round((nilaiBrutto - nilaiRabat - nilaiBsr) * 100) / 100;
+    const nilaiHpp = Math.round(nilaiBrutto * (persenHpp / 100) * 100) / 100;
+    const labaKotor = Math.round((nilaiNetto - nilaiHpp) * 100) / 100;
+    const nilaiTertimbang =
+      Math.round(nilaiBrutto * (persenKeyakinan / 100) * 100) / 100;
 
-    const merged = [...defaultUsers];
-    localUsers.forEach((lu) => {
-      if (!merged.some((m) => m.email === lu.email)) {
-        merged.push({
-          id: lu.id,
-          email: lu.email,
-          nama: lu.nama,
-          role: lu.role,
-          bo_id: lu.bo_id,
-          status_aktif: lu.status_aktif ?? true,
-          created_at: lu.created_at || new Date().toISOString(),
-        });
-      }
-    });
+    const recordToInsert = {
+      bo_id: payload.bo_id,
+      sdm_id: payload.sdm_id,
+      relasi_id: payload.relasi_id,
+      produk_id: payload.produk_id,
+      tahun_anggaran: Number(payload.tahun_anggaran),
+      zona_id: Number(payload.zona_id),
+      harga_satuan: hargaSatuan,
+      qty,
+      persen_keyakinan: persenKeyakinan,
+      persen_rabat: persenRabat,
+      persen_bsr: persenBsr,
+      persen_hpp: persenHpp,
+      nilai_brutto: nilaiBrutto,
+      nilai_rabat: nilaiRabat,
+      nilai_bsr: nilaiBsr,
+      nilai_netto: nilaiNetto,
+      nilai_hpp: nilaiHpp,
+      laba_kotor: labaKotor,
+      nilai_tertimbang_brutto: nilaiTertimbang,
+      catatan: payload.catatan || null,
+    };
 
-    return merged;
+    const { data, error } = await supabase
+      .from('target_penjualan_detail')
+      .insert([recordToInsert])
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
   },
 
-  async createAppUser(payload: {
-    email: string;
-    password: string;
+  async updateTargetPenjualan(
+    id: string,
+    payload: Partial<TargetPenjualanDetail>
+  ): Promise<TargetPenjualanDetail> {
+    // Ambil data lama untuk kalkulasi formula
+    const { data: old, error: fetchErr } = await supabase
+      .from('target_penjualan_detail')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !old) throw new Error('Data target tidak ditemukan.');
+
+    const qty = payload.qty !== undefined ? Number(payload.qty) : Number(old.qty);
+    const hargaSatuan =
+      payload.harga_satuan !== undefined
+        ? Number(payload.harga_satuan)
+        : Number(old.harga_satuan);
+    const persenKeyakinan =
+      payload.persen_keyakinan !== undefined
+        ? Number(payload.persen_keyakinan)
+        : Number(old.persen_keyakinan);
+    const persenRabat =
+      payload.persen_rabat !== undefined
+        ? Number(payload.persen_rabat)
+        : Number(old.persen_rabat);
+    const persenBsr =
+      payload.persen_bsr !== undefined
+        ? Number(payload.persen_bsr)
+        : Number(old.persen_bsr);
+    const persenHpp =
+      payload.persen_hpp !== undefined
+        ? Number(payload.persen_hpp)
+        : Number(old.persen_hpp);
+
+    const nilaiBrutto = Math.round(qty * hargaSatuan * 100) / 100;
+    const nilaiRabat = Math.round(nilaiBrutto * (persenRabat / 100) * 100) / 100;
+    const nilaiBsr = Math.round(nilaiBrutto * (persenBsr / 100) * 100) / 100;
+    const nilaiNetto = Math.round((nilaiBrutto - nilaiRabat - nilaiBsr) * 100) / 100;
+    const nilaiHpp = Math.round(nilaiBrutto * (persenHpp / 100) * 100) / 100;
+    const labaKotor = Math.round((nilaiNetto - nilaiHpp) * 100) / 100;
+    const nilaiTertimbang =
+      Math.round(nilaiBrutto * (persenKeyakinan / 100) * 100) / 100;
+
+    const updatePayload = {
+      ...payload,
+      qty,
+      harga_satuan: hargaSatuan,
+      persen_keyakinan: persenKeyakinan,
+      persen_rabat: persenRabat,
+      persen_bsr: persenBsr,
+      persen_hpp: persenHpp,
+      nilai_brutto: nilaiBrutto,
+      nilai_rabat: nilaiRabat,
+      nilai_bsr: nilaiBsr,
+      nilai_netto: nilaiNetto,
+      nilai_hpp: nilaiHpp,
+      laba_kotor: labaKotor,
+      nilai_tertimbang_brutto: nilaiTertimbang,
+    };
+
+    const { data, error } = await supabase
+      .from('target_penjualan_detail')
+      .update(updatePayload)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async deleteTargetPenjualan(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('target_penjualan_detail')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw new Error(error.message);
+  },
+
+  // ==========================================
+  // 8. PENGELOLAAN PENGGUNA (APP USERS)
+  // ==========================================
+  async getAppUsers(): Promise<AppUser[]> {
+    const { data, error } = await supabase
+      .from('app_users')
+      .select('id, email, nama, role, bo_id, status_aktif, created_at, master_bo:bo_id(nama_bo)')
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error(error.message);
+
+    return (data || []).map((u: any) => ({
+      id: u.id,
+      email: u.email,
+      nama: u.nama,
+      role: u.role,
+      bo_id: u.bo_id,
+      bo_nama: u.master_bo?.nama_bo,
+      status_aktif: u.status_aktif,
+      created_at: u.created_at,
+    }));
+  },
+
+  async createAppUser(user: {
     nama: string;
-    role: UserRole;
+    email: string;
+    password?: string;
+    role: string;
     bo_id?: string | null;
   }): Promise<AppUser> {
-    const cleanEmail = payload.email.trim().toLowerCase();
-    const cleanPass = payload.password.trim();
-    const cleanNama = payload.nama.trim();
+    const { data, error } = await supabase
+      .from('app_users')
+      .insert([
+        {
+          nama: user.nama,
+          email: user.email.toLowerCase().trim(),
+          password: user.password || 'admin123',
+          role: user.role,
+          bo_id: user.role === 'branch_manager' ? user.bo_id : null,
+          status_aktif: true,
+        },
+      ])
+      .select()
+      .single();
 
-    try {
-      const { data, error } = await supabase
-        .from('app_users')
-        .insert([
-          {
-            email: cleanEmail,
-            password: cleanPass,
-            nama: cleanNama,
-            role: payload.role,
-            bo_id: payload.role === 'branch_manager' ? payload.bo_id || null : null,
-            status_aktif: true,
-          },
-        ])
-        .select()
-        .single();
-
-      if (!error && data) {
-        return {
-          id: data.id,
-          email: data.email,
-          nama: data.nama,
-          role: data.role,
-          bo_id: data.bo_id,
-          status_aktif: data.status_aktif,
-          created_at: data.created_at,
-        };
-      }
-    } catch {
-      // fallback
-    }
-
-    const newUser: AppUser = {
-      id: `usr-${Date.now()}`,
-      email: cleanEmail,
-      nama: cleanNama,
-      role: payload.role,
-      bo_id: payload.role === 'branch_manager' ? payload.bo_id || null : null,
-      status_aktif: true,
-      created_at: new Date().toISOString(),
-    };
-
-    const existingStr = localStorage.getItem('edubranch_app_users_v1');
-    const existing = existingStr ? JSON.parse(existingStr) : [];
-    existing.push({ ...newUser, password: cleanPass });
-    localStorage.setItem('edubranch_app_users_v1', JSON.stringify(existing));
-
-    return newUser;
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   async updateAppUser(
     id: string,
-    updates: { nama?: string; role?: UserRole; bo_id?: string | null; status_aktif?: boolean }
-  ): Promise<boolean> {
-    try {
-      const { error } = await supabase
-        .from('app_users')
-        .update({
-          nama: updates.nama,
-          role: updates.role,
-          bo_id: updates.role === 'branch_manager' ? updates.bo_id : null,
-          status_aktif: updates.status_aktif,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id);
+    updates: {
+      nama: string;
+      role: string;
+      bo_id?: string | null;
+      status_aktif: boolean;
+    }
+  ): Promise<AppUser> {
+    const { data, error } = await supabase
+      .from('app_users')
+      .update({
+        nama: updates.nama,
+        role: updates.role,
+        bo_id: updates.role === 'branch_manager' ? updates.bo_id : null,
+        status_aktif: updates.status_aktif,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
 
-      if (!error) return true;
-    } catch {}
+    if (error) throw new Error(error.message);
+    return data;
+  },
 
-    // Fallback local update
-    try {
-      const existingStr = localStorage.getItem('edubranch_app_users_v1');
-      if (existingStr) {
-        const existing: any[] = JSON.parse(existingStr);
-        const idx = existing.findIndex((u) => u.id === id);
-        if (idx !== -1) {
-          existing[idx] = { ...existing[idx], ...updates };
-          localStorage.setItem('edubranch_app_users_v1', JSON.stringify(existing));
-          return true;
+  async resetAppUserPassword(id: string, newPass: string): Promise<void> {
+    const { error } = await supabase
+      .from('app_users')
+      .update({ password: newPass, updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (error) throw new Error(error.message);
+  },
+
+  async toggleAppUserStatus(id: string, status: boolean): Promise<void> {
+    const { error } = await supabase
+      .from('app_users')
+      .update({ status_aktif: status, updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (error) throw new Error(error.message);
+  },
+
+  // ==========================================
+  // 9. CLIENT-SIDE BATCH IMPORT (CHUNKED)
+  // ==========================================
+  async executeBatchImport(
+    tableType: ImportTableType,
+    rows: Record<string, any>[],
+    mode: ImportMode = 'insert',
+    onProgress?: (processed: number, total: number, curBatch: number, totalBatches: number) => void
+  ): Promise<ImportJobReport> {
+    const startTime = Date.now();
+    const totalRows = rows.length;
+    let successCount = 0;
+    let failedCount = 0;
+    const errors: ImportRowError[] = [];
+
+    const tableNameMap: Record<ImportTableType, string> = {
+      master_bo: 'master_bo',
+      master_sdm: 'master_sdm',
+      master_relasi: 'master_relasi',
+      master_produk: 'master_produk',
+      master_harga: 'master_produk_harga',
+      target_detail: 'target_penjualan_detail',
+    };
+
+    const targetTable = tableNameMap[tableType];
+    const CHUNK_SIZE = 100;
+    const totalBatches = Math.ceil(totalRows / CHUNK_SIZE);
+
+    for (let i = 0; i < totalRows; i += CHUNK_SIZE) {
+      const batch = rows.slice(i, i + CHUNK_SIZE);
+      const curBatchNum = Math.floor(i / CHUNK_SIZE) + 1;
+
+      try {
+        let resultError: any = null;
+        if (mode === 'upsert' && tableType === 'master_harga') {
+          const { error } = await supabase
+            .from(targetTable)
+            .upsert(batch, { onConflict: 'produk_id,tahun_anggaran,zona_id' });
+          resultError = error;
+        } else {
+          const { error } = await supabase.from(targetTable).insert(batch);
+          resultError = error;
         }
-      }
-    } catch {}
 
-    return true;
-  },
-
-  async resetAppUserPassword(id: string, newPassword: string): Promise<boolean> {
-    const cleanPass = newPassword.trim();
-    if (!cleanPass) throw new Error('Kata sandi baru tidak boleh kosong.');
-
-    try {
-      const { error } = await supabase
-        .from('app_users')
-        .update({ password: cleanPass, updated_at: new Date().toISOString() })
-        .eq('id', id);
-
-      if (!error) return true;
-    } catch {}
-
-    // Fallback local update
-    try {
-      const existingStr = localStorage.getItem('edubranch_app_users_v1');
-      if (existingStr) {
-        const existing: any[] = JSON.parse(existingStr);
-        const idx = existing.findIndex((u) => u.id === id);
-        if (idx !== -1) {
-          existing[idx].password = cleanPass;
-          localStorage.setItem('edubranch_app_users_v1', JSON.stringify(existing));
-          return true;
+        if (resultError) {
+          failedCount += batch.length;
+          errors.push({
+            rowNumber: i + 1,
+            identifier: `Batch-${curBatchNum}`,
+            reason: resultError.message,
+          });
+        } else {
+          successCount += batch.length;
         }
-      }
-    } catch {}
-
-    return true;
-  },
-
-  async toggleAppUserStatus(id: string, newStatus: boolean): Promise<boolean> {
-    return this.updateAppUser(id, { status_aktif: newStatus });
-  },
-
-  // 8. SERVER-SIDE PAGINATED QUERIES (Handling large datasets up to 600,000 rows)
-  async getTargetPenjualanDetailPaginated(
-    params: PaginationParams,
-    forcedBoId?: string
-  ): Promise<PaginatedResult<TargetPenjualanDetail>> {
-    const { page, pageSize, search, boIdFilter } = params;
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-
-    try {
-      let query = supabase.from('target_penjualan_detail').select('*', { count: 'exact' });
-
-      // STRICT ROLE PROTECTION: If BM, ALWAYS force their assigned bo_id
-      if (forcedBoId) {
-        query = query.eq('bo_id', forcedBoId);
-      } else if (boIdFilter && boIdFilter !== 'ALL') {
-        query = query.eq('bo_id', boIdFilter);
+      } catch (err: any) {
+        failedCount += batch.length;
+        errors.push({
+          rowNumber: i + 1,
+          identifier: `Batch-${curBatchNum}`,
+          reason: err.message || 'Kesalahan impor batch',
+        });
       }
 
-      query = query.order('created_at', { ascending: false }).range(from, to);
-
-      const { data, count, error } = await query;
-      if (!error && data) {
-        const total = count ?? data.length;
-        return {
-          data,
-          total,
-          page,
-          pageSize,
-          totalPages: Math.ceil(total / pageSize) || 1,
-        };
+      if (onProgress) {
+        onProgress(successCount, totalRows, curBatchNum, totalBatches);
       }
-    } catch {
-      // ignore
     }
-
-    // Fallback
-    const fallbackAll = await this.getTargetPenjualanDetail();
-    let filtered = fallbackAll;
-    if (forcedBoId) {
-      filtered = filtered.filter((t) => t.bo_id === forcedBoId);
-    } else if (boIdFilter && boIdFilter !== 'ALL') {
-      filtered = filtered.filter((t) => t.bo_id === boIdFilter);
-    }
-
-    if (search) {
-      const q = search.toLowerCase();
-      filtered = filtered.filter(
-        (t) =>
-          t.catatan?.toLowerCase().includes(q) ||
-          t.tahun_anggaran.toString().includes(q)
-      );
-    }
-
-    const total = filtered.length;
-    const slice = filtered.slice(from, to + 1);
 
     return {
-      data: slice,
-      total,
-      page,
-      pageSize,
-      totalPages: Math.ceil(total / pageSize) || 1,
+      tableName: tableType,
+      totalRows,
+      successCount,
+      failedCount,
+      durationMs: Date.now() - startTime,
+      errors,
+      timestamp: new Date().toISOString(),
     };
   },
 };
-

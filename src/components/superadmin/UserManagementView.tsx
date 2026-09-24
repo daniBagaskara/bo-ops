@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppUser, MasterBO, UserRole } from '../../types';
-import { supabaseService } from '../../services/supabaseService';
+import { apiService } from '../../services/apiService';
 import {
   UserCog,
   Plus,
@@ -61,11 +61,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   });
   const [showNewPassword, setShowNewPassword] = useState(false);
 
-  // Load users from Supabase / service
+  // Load users from Cloud SQL
   const loadUsers = async () => {
     setIsLoading(true);
     try {
-      const data = await supabaseService.getAppUsers();
+      const data = await apiService.getUsers();
       setUsers(data);
     } catch (err: any) {
       onShowToast('error', 'Gagal Memuat Pengguna', err.message || 'Terjadi kesalahan sistem.');
@@ -93,7 +93,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
     setIsLoading(true);
     try {
-      const created = await supabaseService.createAppUser({
+      const created = await apiService.createUser({
         nama: addForm.nama,
         email: addForm.email,
         password: addForm.password,
@@ -125,7 +125,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
     setIsLoading(true);
     try {
-      await supabaseService.updateAppUser(editingUser.id, {
+      const updated = await apiService.updateUser(editingUser.id, {
         nama: editForm.nama,
         role: editForm.role,
         bo_id: editForm.role === 'branch_manager' ? editForm.bo_id : null,
@@ -137,14 +137,14 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           u.id === editingUser.id
             ? {
                 ...u,
-                nama: editForm.nama,
-                role: editForm.role,
-                bo_id: editForm.role === 'branch_manager' ? editForm.bo_id : null,
+                nama: updated.nama,
+                role: updated.role,
+                bo_id: updated.bo_id,
                 bo_nama:
-                  editForm.role === 'branch_manager'
-                    ? branchOffices.find((b) => b.id === editForm.bo_id)?.nama_bo
+                  updated.role === 'branch_manager'
+                    ? branchOffices.find((b) => b.id === updated.bo_id)?.nama_bo
                     : undefined,
-                status_aktif: editForm.status_aktif,
+                status_aktif: updated.status_aktif,
               }
             : u
         )
@@ -176,7 +176,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
     setIsLoading(true);
     try {
-      await supabaseService.resetAppUserPassword(resettingUser.id, resetForm.newPassword);
+      await apiService.resetPassword(resettingUser.id, resetForm.newPassword);
       setResettingUser(null);
       setResetForm({ newPassword: '', confirmPassword: '' });
       onShowToast('success', 'Sandi Direset', `Kata sandi untuk ${resettingUser.email} berhasil diubah.`);
@@ -191,7 +191,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   const handleToggleStatus = async (user: AppUser) => {
     const newStatus = !user.status_aktif;
     try {
-      await supabaseService.toggleAppUserStatus(user.id, newStatus);
+      await apiService.toggleUserStatus(user.id, newStatus);
       setUsers((prev) =>
         prev.map((u) => (u.id === user.id ? { ...u, status_aktif: newStatus } : u))
       );

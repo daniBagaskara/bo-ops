@@ -89,6 +89,7 @@ export const ImportDataModal: React.FC<ImportDataModalProps> = ({
     setProcessStatus('Mempersiapkan batch dan validasi data...');
 
     try {
+      setProcessStatus('Memproses dan menyinkronkan data ke Supabase...');
       const resultReport = await batchImportService.executeBatchImport(
         tableType,
         parsedData.rows,

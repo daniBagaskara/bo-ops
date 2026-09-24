@@ -109,6 +109,14 @@ export interface TargetPenjualanDetail {
   nilai_tertimbang_brutto: number; // Brutto * (Keyakinan / 100)
   catatan?: string;
   created_at?: string;
+  // Joined fields for tables and detail views
+  bo_nama?: string;
+  bo_kode?: string;
+  sdm_nama?: string;
+  relasi_nama?: string;
+  relasi_kode?: string;
+  produk_judul?: string;
+  produk_sku?: string;
 }
 
 export interface CalculationResult {
@@ -185,5 +193,6 @@ export interface ImportJobReport {
   failedCount: number;
   durationMs: number;
   errors: ImportRowError[];
+  timestamp?: string;
 }
 

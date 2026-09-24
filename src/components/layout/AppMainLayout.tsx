@@ -9,7 +9,7 @@ import {
   TargetPenjualanDetail,
   AppNavKey,
 } from '../../types';
-import { supabaseService } from '../../services/supabaseService';
+import { apiService } from '../../services/apiService';
 import { AppSidebar } from './AppSidebar';
 import { AppHeader } from './AppHeader';
 import { OperationalSummaryView } from '../dashboard/OperationalSummaryView';
@@ -20,14 +20,6 @@ import { MasterProdukCrud } from '../superadmin/MasterProdukCrud';
 import { MasterHargaCrud } from '../superadmin/MasterHargaCrud';
 import { TargetDetailCrud } from '../superadmin/TargetDetailCrud';
 import { UserManagementView } from '../superadmin/UserManagementView';
-import {
-  INITIAL_BRANCH_OFFICES,
-  INITIAL_SDM,
-  INITIAL_RELASI,
-  INITIAL_PRODUK,
-  INITIAL_HARGA_MATRIX,
-  INITIAL_TARGETS,
-} from '../../data/mockData';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
 
 interface AppMainLayoutProps {
@@ -54,38 +46,42 @@ export const AppMainLayout: React.FC<AppMainLayoutProps> = ({
 
   // Table Data States
   const [isLoading, setIsLoading] = useState(false);
-  const [boList, setBoList] = useState<MasterBO[]>(INITIAL_BRANCH_OFFICES);
-  const [sdmList, setSdmList] = useState<MasterSDM[]>(INITIAL_SDM);
-  const [relasiList, setRelasiList] = useState<MasterRelasi[]>(INITIAL_RELASI);
-  const [produkList, setProdukList] = useState<MasterProduk[]>(INITIAL_PRODUK);
-  const [hargaList, setHargaList] = useState<MasterProdukHarga[]>(INITIAL_HARGA_MATRIX);
-  const [targetList, setTargetList] = useState<TargetPenjualanDetail[]>(INITIAL_TARGETS);
+  const [boList, setBoList] = useState<MasterBO[]>([]);
+  const [sdmList, setSdmList] = useState<MasterSDM[]>([]);
+  const [relasiList, setRelasiList] = useState<MasterRelasi[]>([]);
+  const [produkList, setProdukList] = useState<MasterProduk[]>([]);
+  const [hargaList, setHargaList] = useState<MasterProdukHarga[]>([]);
+  const [targetList, setTargetList] = useState<TargetPenjualanDetail[]>([]);
 
-  // Fetch all operational data
+  // Fetch all operational data directly from Cloud SQL backend
   const loadAllData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [boRes, sdmRes, relRes, prodRes, hrgRes, tgtRes] = await Promise.allSettled([
-        supabaseService.getMasterBO(),
-        supabaseService.getMasterSDM(),
-        supabaseService.getMasterRelasi(),
-        supabaseService.getMasterProduk(),
-        supabaseService.getMasterProdukHarga(),
-        supabaseService.getTargetPenjualanDetail(),
+      const isBM = currentUser.role === 'branch_manager';
+      const boFilter = isBM ? currentUser.assigned_bo_id : undefined;
+
+      const [bos, sdms, relasis, produks, hargas, targetResult] = await Promise.all([
+        apiService.getBranchOffices(),
+        apiService.getSdmList(boFilter),
+        apiService.getRelasiList(boFilter),
+        apiService.getProdukList(),
+        apiService.getHargaMatrix(),
+        apiService.getTargets({ bo_id: boFilter, limit: 100 }),
       ]);
 
-      if (boRes.status === 'fulfilled' && boRes.value.length > 0) setBoList(boRes.value);
-      if (sdmRes.status === 'fulfilled' && sdmRes.value.length > 0) setSdmList(sdmRes.value);
-      if (relRes.status === 'fulfilled' && relRes.value.length > 0) setRelasiList(relRes.value);
-      if (prodRes.status === 'fulfilled' && prodRes.value.length > 0) setProdukList(prodRes.value);
-      if (hrgRes.status === 'fulfilled' && hrgRes.value.length > 0) setHargaList(hrgRes.value);
-      if (tgtRes.status === 'fulfilled' && tgtRes.value.length > 0) setTargetList(tgtRes.value);
-    } catch {
-      // Graceful fallback to initial state
+      setBoList(bos);
+      setSdmList(sdms);
+      setRelasiList(relasis);
+      setProdukList(produks);
+      setHargaList(hargas);
+      setTargetList(targetResult.data);
+    } catch (err: any) {
+      console.error('Error fetching database records:', err);
+      showToast('error', 'Gagal Sinkronisasi Data', err.message || 'Koneksi ke database gagal.');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [currentUser, showToast]);
 
   useEffect(() => {
     loadAllData();
@@ -112,206 +108,192 @@ export const AppMainLayout: React.FC<AppMainLayoutProps> = ({
     }
   }, [currentNav, isSuperAdmin, showToast]);
 
-  // CRUD HANDLERS (Used for Superadmin operations)
-  // 1. BO
+  // 1. BO Handlers
   const handleAddBo = async (data: Omit<MasterBO, 'id'>) => {
     try {
-      const res = await supabaseService.insertMasterBO(data);
+      const res = await apiService.createBranchOffice(data);
       setBoList((prev) => [res, ...prev]);
-      showToast('success', 'Cabang Ditambahkan', `BO ${data.nama_bo} berhasil didaftarkan.`);
-    } catch {
-      const fallback: MasterBO = { ...data, id: `bo-${Date.now()}` };
-      setBoList((prev) => [fallback, ...prev]);
-      showToast('success', 'Cabang Disimpan', `BO ${data.nama_bo} tersimpan.`);
+      showToast('success', 'Cabang Ditambahkan', `BO ${data.nama_bo} berhasil didaftarkan ke Cloud SQL.`);
+    } catch (err: any) {
+      showToast('error', 'Gagal Menambah BO', err.message);
     }
   };
 
   const handleUpdateBo = async (id: string, data: Partial<MasterBO>) => {
     try {
-      await supabaseService.updateMasterBO(id, data);
-    } catch {
-      // fallback
+      const res = await apiService.updateBranchOffice(id, data);
+      setBoList((prev) => prev.map((b) => (b.id === id ? res : b)));
+      showToast('success', 'Perubahan Disimpan', 'Data kantor cabang diperbarui.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Memperbarui BO', err.message);
     }
-    setBoList((prev) => prev.map((b) => (b.id === id ? { ...b, ...data } : b)));
-    showToast('success', 'Perubahan Disimpan', 'Data kantor cabang diperbarui.');
   };
 
   const handleDeleteBo = async (id: string) => {
     try {
-      await supabaseService.deleteMasterBO(id);
-    } catch {
-      // fallback
+      await apiService.deleteBranchOffice(id);
+      setBoList((prev) => prev.filter((b) => b.id !== id));
+      showToast('info', 'Cabang Dihapus', 'Data kantor cabang telah dihapus dari sistem.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Menghapus BO', err.message);
     }
-    setBoList((prev) => prev.filter((b) => b.id !== id));
-    showToast('info', 'Cabang Dihapus', 'Data kantor cabang telah dihapus.');
   };
 
-  // 2. SDM
+  // 2. SDM Handlers
   const handleAddSdm = async (data: Omit<MasterSDM, 'id'>) => {
     try {
-      const res = await supabaseService.insertMasterSDM(data);
+      const res = await apiService.createSdm(data);
       setSdmList((prev) => [res, ...prev]);
-    } catch {
-      const fallback: MasterSDM = { ...data, id: `sdm-${Date.now()}` };
-      setSdmList((prev) => [fallback, ...prev]);
+      showToast('success', 'SDM Ditambahkan', `${data.nama} berhasil didaftarkan.`);
+    } catch (err: any) {
+      showToast('error', 'Gagal Menambah SDM', err.message);
     }
-    showToast('success', 'SDM Ditambahkan', `${data.nama} berhasil didaftarkan.`);
   };
 
   const handleUpdateSdm = async (id: string, data: Partial<MasterSDM>) => {
     try {
-      await supabaseService.updateMasterSDM(id, data);
-    } catch {
-      // fallback
+      const res = await apiService.updateSdm(id, data);
+      setSdmList((prev) => prev.map((s) => (s.id === id ? res : s)));
+      showToast('success', 'SDM Diperbarui', 'Data SDM berhasil diperbarui.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Memperbarui SDM', err.message);
     }
-    setSdmList((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
-    showToast('success', 'SDM Diperbarui', 'Data SDM berhasil diperbarui.');
   };
 
   const handleDeleteSdm = async (id: string) => {
     try {
-      await supabaseService.deleteMasterSDM(id);
-    } catch {
-      // fallback
+      await apiService.deleteSdm(id);
+      setSdmList((prev) => prev.filter((s) => s.id !== id));
+      showToast('info', 'SDM Dihapus', 'Data SDM telah dihapus.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Menghapus SDM', err.message);
     }
-    setSdmList((prev) => prev.filter((s) => s.id !== id));
-    showToast('info', 'SDM Dihapus', 'Data SDM telah dihapus.');
   };
 
-  // 3. Relasi
+  // 3. Relasi Handlers
   const handleAddRelasi = async (data: Omit<MasterRelasi, 'id'>) => {
     try {
-      const res = await supabaseService.insertMasterRelasi(data);
+      const res = await apiService.createRelasi(data);
       setRelasiList((prev) => [res, ...prev]);
-    } catch {
-      const fallback: MasterRelasi = { ...data, id: `rel-${Date.now()}` };
-      setRelasiList((prev) => [fallback, ...prev]);
+      showToast('success', 'Relasi Ditambahkan', `${data.nama_relasi} berhasil disimpan.`);
+    } catch (err: any) {
+      showToast('error', 'Gagal Menambah Relasi', err.message);
     }
-    showToast('success', 'Relasi Ditambahkan', `${data.nama_relasi} berhasil disimpan.`);
   };
 
   const handleUpdateRelasi = async (id: string, data: Partial<MasterRelasi>) => {
     try {
-      await supabaseService.updateMasterRelasi(id, data);
-    } catch {
-      // fallback
+      const res = await apiService.updateRelasi(id, data);
+      setRelasiList((prev) => prev.map((r) => (r.id === id ? res : r)));
+      showToast('success', 'Relasi Diperbarui', 'Data relasi berhasil diperbarui.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Memperbarui Relasi', err.message);
     }
-    setRelasiList((prev) => prev.map((r) => (r.id === id ? { ...r, ...data } : r)));
-    showToast('success', 'Relasi Diperbarui', 'Data relasi berhasil diperbarui.');
   };
 
   const handleDeleteRelasi = async (id: string) => {
     try {
-      await supabaseService.deleteMasterRelasi(id);
-    } catch {
-      // fallback
+      await apiService.deleteRelasi(id);
+      setRelasiList((prev) => prev.filter((r) => r.id !== id));
+      showToast('info', 'Relasi Dihapus', 'Data relasi telah dihapus.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Menghapus Relasi', err.message);
     }
-    setRelasiList((prev) => prev.filter((r) => r.id !== id));
-    showToast('info', 'Relasi Dihapus', 'Data mitra relasi telah dihapus.');
   };
 
-  // 4. Produk
+  // 4. Produk Handlers
   const handleAddProduk = async (data: Omit<MasterProduk, 'id'>) => {
     try {
-      const res = await supabaseService.insertMasterProduk(data);
+      const res = await apiService.createProduk(data);
       setProdukList((prev) => [res, ...prev]);
-    } catch {
-      const fallback: MasterProduk = { ...data, id: `prd-${Date.now()}` };
-      setProdukList((prev) => [fallback, ...prev]);
+      showToast('success', 'Produk Ditambahkan', `${data.judul_buku} tersimpan.`);
+    } catch (err: any) {
+      showToast('error', 'Gagal Menambah Produk', err.message);
     }
-    showToast('success', 'Produk Ditambahkan', `${data.judul_buku} tersimpan.`);
   };
 
   const handleUpdateProduk = async (id: string, data: Partial<MasterProduk>) => {
     try {
-      await supabaseService.updateMasterProduk(id, data);
-    } catch {
-      // fallback
+      const res = await apiService.updateProduk(id, data);
+      setProdukList((prev) => prev.map((p) => (p.id === id ? res : p)));
+      showToast('success', 'Produk Diperbarui', 'Data produk berhasil diupdate.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Memperbarui Produk', err.message);
     }
-    setProdukList((prev) => prev.map((p) => (p.id === id ? { ...p, ...data } : p)));
-    showToast('success', 'Produk Diperbarui', 'Data buku berhasil diperbarui.');
   };
 
   const handleDeleteProduk = async (id: string) => {
     try {
-      await supabaseService.deleteMasterProduk(id);
-    } catch {
-      // fallback
+      await apiService.deleteProduk(id);
+      setProdukList((prev) => prev.filter((p) => p.id !== id));
+      showToast('info', 'Produk Dihapus', 'Data produk telah dihapus.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Menghapus Produk', err.message);
     }
-    setProdukList((prev) => prev.filter((p) => p.id !== id));
-    showToast('info', 'Produk Dihapus', 'Data buku telah dihapus.');
   };
 
-  // 5. Harga
+  // 5. Harga Handlers
   const handleAddHarga = async (data: Omit<MasterProdukHarga, 'id'>) => {
     try {
-      const res = await supabaseService.insertMasterProdukHarga(data);
+      const res = await apiService.saveHarga(data as any);
       setHargaList((prev) => [res, ...prev]);
-    } catch {
-      const fallback: MasterProdukHarga = { ...data, id: `hrg-${Date.now()}` };
-      setHargaList((prev) => [fallback, ...prev]);
+      showToast('success', 'Tarif Disimpan', 'Tarif resmi buku berhasil disimpan.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Menyimpan Tarif', err.message);
     }
-    showToast('success', 'Tarif Ditambahkan', 'Tarif resmi buku berhasil disimpan.');
   };
 
-  const handleUpdateHarga = async (id: string, data: Partial<MasterProdukHarga>) => {
+  const handleUpdateHarga = async (_id: string, data: Partial<MasterProdukHarga>) => {
     try {
-      await supabaseService.updateMasterProdukHarga(id, data);
-    } catch {
-      // fallback
+      const res = await apiService.saveHarga(data as any);
+      setHargaList((prev) => prev.map((h) => (h.id === res.id ? res : h)));
+      showToast('success', 'Tarif Diperbarui', 'Tarif harga berhasil diupdate.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Memperbarui Tarif', err.message);
     }
-    setHargaList((prev) => prev.map((h) => (h.id === id ? { ...h, ...data } : h)));
-    showToast('success', 'Tarif Diperbarui', 'Tarif harga berhasil diupdate.');
   };
 
   const handleDeleteHarga = async (id: string) => {
-    try {
-      await supabaseService.deleteMasterProdukHarga(id);
-    } catch {
-      // fallback
-    }
     setHargaList((prev) => prev.filter((h) => h.id !== id));
     showToast('info', 'Tarif Dihapus', 'Tarif harga buku dihapus.');
   };
 
-  // 6. Target Penjualan
+  // 6. Target Handlers
   const handleAddTarget = async (data: any) => {
-    // If Branch Manager, enforce their assigned BO ID
     const targetPayload = !isSuperAdmin && currentUser.assigned_bo_id
       ? { ...data, bo_id: currentUser.assigned_bo_id }
       : data;
 
     try {
-      const res = await supabaseService.insertTargetPenjualanDetail(targetPayload);
+      const res = await apiService.createTarget(targetPayload);
       setTargetList((prev) => [res, ...prev]);
-    } catch {
-      const fallback: TargetPenjualanDetail = { ...targetPayload, id: `tgt-${Date.now()}` };
-      setTargetList((prev) => [fallback, ...prev]);
+      showToast('success', 'Target Disimpan', 'Alokasi target penjualan berhasil disimpan ke Cloud SQL.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Menyimpan Target', err.message);
     }
-    showToast('success', 'Target Disimpan', 'Alokasi target penjualan berhasil disimpan.');
   };
 
   const handleUpdateTarget = async (id: string, data: any) => {
     try {
-      await supabaseService.updateTargetPenjualanDetail(id, data);
-    } catch {
-      // fallback
+      const res = await apiService.updateTarget(id, data);
+      setTargetList((prev) => prev.map((t) => (t.id === id ? res : t)));
+      showToast('success', 'Target Diperbarui', 'Kalkulasi target berhasil diperbarui.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Memperbarui Target', err.message);
     }
-    setTargetList((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)));
-    showToast('success', 'Target Diperbarui', 'Kalkulasi target berhasil diperbarui.');
   };
 
   const handleDeleteTarget = async (id: string) => {
     try {
-      await supabaseService.deleteTargetPenjualanDetail(id);
-    } catch {
-      // fallback
+      await apiService.deleteTarget(id);
+      setTargetList((prev) => prev.filter((t) => t.id !== id));
+      showToast('info', 'Target Dihapus', 'Item target penjualan telah dihapus.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Menghapus Target', err.message);
     }
-    setTargetList((prev) => prev.filter((t) => t.id !== id));
-    showToast('info', 'Target Dihapus', 'Item target penjualan telah dihapus.');
   };
 
-  // Sidebar badge counts
+  // Badge counts
   const badgeCounts = {
     bo: boList.length,
     sdm: sdmList.length,
@@ -321,7 +303,7 @@ export const AppMainLayout: React.FC<AppMainLayoutProps> = ({
     target: targetList.length,
   };
 
-  // Main content render switcher with RBAC protection
+  // Content switcher
   const renderContent = () => {
     switch (currentNav) {
       case 'dashboard_overview':
@@ -467,7 +449,6 @@ export const AppMainLayout: React.FC<AppMainLayoutProps> = ({
           currentUser={currentUser}
           onLogout={onLogout}
           onToggleSidebar={() => {
-            // On mobile, toggle drawer; on desktop toggle collapse
             if (window.innerWidth < 1024) {
               setIsMobileSidebarOpen(!isMobileSidebarOpen);
             } else {
