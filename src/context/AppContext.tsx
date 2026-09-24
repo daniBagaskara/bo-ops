@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import {
   UserProfile,
   MasterBO,
@@ -189,17 +189,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`${STORAGE_KEY_PREFIX}targets`, JSON.stringify(targetList));
   }, [targetList]);
 
-  const showToast = (type: 'success' | 'warning' | 'error' | 'info', title: string, message: string) => {
-    const id = `${Date.now()}-${Math.random()}`;
-    setToasts((prev) => [...prev, { id, type, title, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4500);
-  };
+  const showToast = useCallback(
+    (type: 'success' | 'warning' | 'error' | 'info', title: string, message: string) => {
+      const id = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      setToasts((prev) => {
+        // Prevent duplicate toasts with the exact same title & message
+        if (prev.some((t) => t.title === title && t.message === message)) {
+          return prev;
+        }
+        // Limit max active toasts to 3
+        const next = [...prev, { id, type, title, message }];
+        return next.slice(-3);
+      });
 
-  const dismissToast = (id: string) => {
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 3500);
+    },
+    []
+  );
+
+  const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
+  }, []);
 
   // Current active BO object
   const activeBO = useMemo(() => {

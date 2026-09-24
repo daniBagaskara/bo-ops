@@ -83,7 +83,7 @@ export const SuperadminDashboard: React.FC<SuperadminDashboardProps> = ({
   const [targetList, setTargetList] = useState<TargetPenjualanDetail[]>(INITIAL_TARGETS);
 
   // Fetch all tables from Supabase
-  const loadAllDataFromSupabase = useCallback(async () => {
+  const loadAllDataFromSupabase = useCallback(async (isManual: boolean = false) => {
     setIsLoading(true);
     try {
       const status = await supabaseService.checkConnection();
@@ -106,18 +106,23 @@ export const SuperadminDashboard: React.FC<SuperadminDashboardProps> = ({
       if (hrgRes.status === 'fulfilled' && hrgRes.value.length > 0) setHargaList(hrgRes.value);
       if (tgtRes.status === 'fulfilled' && tgtRes.value.length > 0) setTargetList(tgtRes.value);
 
-      showToast('info', 'Sinkronisasi Selesai', 'Data terbaru berhasil dimuat dari database Supabase.');
+      if (isManual) {
+        showToast('info', 'Sinkronisasi Selesai', 'Data terbaru berhasil dimuat dari database Supabase.');
+      }
     } catch (err: any) {
       console.error('Failed to load from Supabase:', err);
-      showToast('warning', 'Peringatan Koneksi', 'Menggunakan data state lokal saat menyambung ke Supabase.');
+      if (isManual) {
+        showToast('warning', 'Peringatan Koneksi', 'Menggunakan data state lokal saat menyambung ke Supabase.');
+      }
     } finally {
       setIsLoading(false);
     }
   }, [showToast]);
 
   useEffect(() => {
-    loadAllDataFromSupabase();
-  }, [loadAllDataFromSupabase]);
+    loadAllDataFromSupabase(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // CLEAR ALL DATA
   const handleClearAllData = async () => {
@@ -481,7 +486,7 @@ export const SuperadminDashboard: React.FC<SuperadminDashboardProps> = ({
             {/* Refresh Sync Button */}
             <button
               type="button"
-              onClick={loadAllDataFromSupabase}
+              onClick={() => loadAllDataFromSupabase(true)}
               disabled={isLoading}
               className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
               title="Sinkronisasi Ulang Data Supabase"
