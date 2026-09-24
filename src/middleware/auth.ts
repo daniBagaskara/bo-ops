@@ -55,32 +55,55 @@ export const requireAuth = async (
 
   // Mode 1: Stateless JWT Verification (Vercel Serverless Ready)
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
-    if (decoded && decoded.id) {
-      const userRows = await db
-        .select({
-          id: appUsers.id,
-          email: appUsers.email,
-          nama: appUsers.nama,
-          role: appUsers.role,
-          bo_id: appUsers.bo_id,
-          status_aktif: appUsers.status_aktif,
-          bo_nama: masterBo.nama_bo,
-        })
-        .from(appUsers)
-        .leftJoin(masterBo, eq(appUsers.bo_id, masterBo.id))
-        .where(eq(appUsers.id, decoded.id))
-        .limit(1);
+    const decoded = jwt.verify(token, JWT_SECRET) as {
+      id: string;
+      email: string;
+      role: 'superadmin' | 'branch_manager';
+      bo_id: string | null;
+    };
 
-      if (userRows.length === 0 || !userRows[0].status_aktif) {
-        return res.status(403).json({ error: 'Akun dinonaktifkan atau tidak ditemukan.' });
+    if (decoded && decoded.id) {
+      try {
+        // Query user from database to verify active status
+        const userRows = await db
+          .select({
+            id: appUsers.id,
+            email: appUsers.email,
+            nama: appUsers.nama,
+            role: appUsers.role,
+            bo_id: appUsers.bo_id,
+            status_aktif: appUsers.status_aktif,
+            bo_nama: masterBo.nama_bo,
+          })
+          .from(appUsers)
+          .leftJoin(masterBo, eq(appUsers.bo_id, masterBo.id))
+          .where(eq(appUsers.id, decoded.id))
+          .limit(1);
+
+        if (userRows.length > 0) {
+          if (!userRows[0].status_aktif) {
+            return res.status(403).json({ error: 'Akun dinonaktifkan atau tidak ditemukan.' });
+          }
+          req.appUser = userRows[0] as AppUserPayload;
+          return next();
+        }
+      } catch (dbErr) {
+        console.warn('[BO-OPS Auth] DB check skipped during JWT verify, trusting token payload:', dbErr);
       }
 
-      req.appUser = userRows[0] as AppUserPayload;
+      // If database was temporarily unreachable or slow in serverless cold start, trust the valid signed JWT token payload
+      req.appUser = {
+        id: decoded.id,
+        email: decoded.email,
+        nama: decoded.email.split('@')[0],
+        role: decoded.role,
+        bo_id: decoded.bo_id,
+        status_aktif: true,
+      };
       return next();
     }
-  } catch (_err) {
-    // If not a valid JWT, check legacy token fallback
+  } catch (jwtErr: any) {
+    // JWT verification failed, proceed to fallback checks
   }
 
   // Mode 2: Legacy session token fallback

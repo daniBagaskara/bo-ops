@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../../types';
-import { supabaseService } from '../../services/supabaseService';
+import { apiService } from '../../services/apiService';
 import {
   Lock,
   Mail,
@@ -38,7 +38,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
 
     setIsLoading(true);
     try {
-      const user = await supabaseService.login(cleanEmail, cleanPass);
+      const { user } = await apiService.login(cleanEmail, cleanPass);
       onLogin(user);
     } catch (err: any) {
       setErrorMessage(err.message || 'Email atau kata sandi tidak sesuai.');
@@ -53,7 +53,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
     setErrorMessage(null);
     setIsLoading(true);
     try {
-      const user = await supabaseService.login(presetEmail, presetPass);
+      const { user } = await apiService.login(presetEmail, presetPass);
       onLogin(user);
     } catch (err: any) {
       setErrorMessage(err.message || 'Gagal masuk.');
@@ -63,137 +63,127 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 font-sans antialiased text-slate-800">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        {/* Brand Header */}
-        <div className="flex justify-center items-center gap-2.5 mb-2">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-xs">
-            <Shield className="w-5 h-5" />
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        {/* Header */}
+        <div className="bg-indigo-600 p-8 text-white text-center relative">
+          <div className="inline-flex p-3 bg-white/10 rounded-2xl ring-1 ring-white/20 mb-3 shadow-inner">
+            <Shield className="w-8 h-8 text-white" />
           </div>
-          <span className="text-2xl font-bold tracking-tight text-slate-900">BO-OPS</span>
+          <h1 className="text-2xl font-black tracking-tight">BO-OPS PLATFORM</h1>
+          <p className="text-indigo-100 text-xs mt-1 font-medium tracking-wide">
+            Sistem Terpadu Target & Alokasi Penjualan Kantor Cabang
+          </p>
         </div>
-        <h2 className="text-center text-lg font-semibold text-slate-900">
-          Sistem Operasional Kantor Cabang
-        </h2>
-        <p className="mt-1 text-center text-xs text-slate-500">
-          Masuk dengan akun terdaftar di database Supabase
-        </p>
-      </div>
 
-      <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-6 sm:px-8 border border-slate-200 rounded-xl shadow-xs">
-          {/* Notification Messages */}
+        {/* Form Body */}
+        <div className="p-8">
           {errorMessage && (
-            <div className="mb-5 p-3 rounded-lg bg-rose-50 border border-rose-200 flex items-start gap-2.5 text-xs text-rose-800 animate-in fade-in duration-150">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <div className="flex-1 leading-relaxed">{errorMessage}</div>
+            <div className="mb-6 p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3 text-rose-700 text-xs animate-shake">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+              <div className="font-medium leading-relaxed">{errorMessage}</div>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                Alamat Email <span className="text-rose-500">*</span>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                Alamat Email
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="email"
-                  required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="superadmin@edubranch.id"
-                  className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="admin@penerbit.co.id"
+                  required
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all text-slate-900 font-medium placeholder:text-slate-400"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">
-                Kata Sandi <span className="text-rose-500">*</span>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                Kata Sandi
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type={showPassword ? 'text' : 'password'}
-                  required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-9 pr-10 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                  className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:bg-white transition-all text-slate-900 font-medium placeholder:text-slate-400"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
-                  aria-label="Lihat kata sandi"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-lg shadow-xs text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                    Memverifikasi...
-                  </>
-                ) : (
-                  'Masuk ke Akun'
-                )}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
+            >
+              {isLoading ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Memverifikasi Akun...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Masuk ke Dashboard</span>
+                </>
+              )}
+            </button>
           </form>
 
-          {/* Quick-fill & 1-Click Login Helper */}
-          <div className="mt-6 p-3.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-700 flex items-center gap-1.5">
-                <UserCheck className="w-3.5 h-3.5 text-blue-600" />
-                Akses Cepat Pengguna (Supabase):
-              </span>
-              <span className="text-[10px] text-slate-400">Klik untuk masuk langsung</span>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2">
+          {/* Quick Access Presets */}
+          <div className="mt-8 pt-6 border-t border-slate-100">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center mb-3">
+              Akses Cepat Pengujian
+            </p>
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => handleQuickLogin('superadmin@edubranch.id', 'admin123')}
-                disabled={isLoading}
-                className="w-full text-left p-2.5 rounded-md bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50/50 transition-colors flex items-center justify-between text-xs group"
+                onClick={() => handleQuickLogin('admin@penerbit.co.id', 'SuperAdmin123!')}
+                className="p-2.5 bg-slate-50 hover:bg-indigo-50/70 border border-slate-200 hover:border-indigo-200 rounded-xl text-left transition-all group"
               >
-                <div>
-                  <span className="font-medium text-slate-800 group-hover:text-blue-700">Superadmin Pusat</span>
-                  <span className="block text-[11px] text-slate-500 font-mono">superadmin@edubranch.id</span>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 group-hover:text-indigo-600">
+                  <Shield className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Super Admin</span>
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold">Superadmin</span>
+                <div className="text-[10px] text-slate-400 mt-0.5 truncate">admin@penerbit.co.id</div>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleQuickLogin('bm.surabaya@edubranch.id', 'bm123')}
-                disabled={isLoading}
-                className="w-full text-left p-2.5 rounded-md bg-white border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/50 transition-colors flex items-center justify-between text-xs group"
+                onClick={() => handleQuickLogin('bm.jakarta@penerbit.co.id', 'BranchMgr123!')}
+                className="p-2.5 bg-slate-50 hover:bg-blue-50/70 border border-slate-200 hover:border-blue-200 rounded-xl text-left transition-all group"
               >
-                <div>
-                  <span className="font-medium text-slate-800 group-hover:text-emerald-700">Ahmad Fauzi (BM Surabaya)</span>
-                  <span className="block text-[11px] text-slate-500 font-mono">bm.surabaya@edubranch.id</span>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 group-hover:text-blue-600">
+                  <UserCheck className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Branch Manager</span>
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold">BM Cabang</span>
+                <div className="text-[10px] text-slate-400 mt-0.5 truncate">bm.jakarta@penerbit.co.id</div>
               </button>
-            </div>
-
-            <div className="pt-1 flex items-center gap-1.5 text-[11px] text-slate-500 border-t border-slate-200/80">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Database: Terhubung langsung ke Supabase PostgreSQL</span>
             </div>
           </div>
+        </div>
+
+        {/* Footer info */}
+        <div className="bg-slate-50 px-8 py-3.5 border-t border-slate-100 text-center">
+          <p className="text-[10px] text-slate-400">
+            © {new Date().getFullYear()} PT Penerbit Erlangga Mahameru • All Rights Reserved
+          </p>
         </div>
       </div>
     </div>
