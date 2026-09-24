@@ -280,7 +280,7 @@ export async function runSeed() {
   const usersToSeed = [
     {
       email: 'superadmin@edubranch.id',
-      password_hash: hashAdmin,
+      password: hashAdmin,
       nama: 'Super Admin Pusat',
       role: 'superadmin',
       bo_id: null,
@@ -288,7 +288,7 @@ export async function runSeed() {
     },
     {
       email: 'bm.surabaya@edubranch.id',
-      password_hash: hashBM,
+      password: hashBM,
       nama: 'Ahmad Fauzi (BM Surabaya)',
       role: 'branch_manager',
       bo_id: sby?.id || null,
@@ -297,7 +297,7 @@ export async function runSeed() {
     // Also include user's Google email as Super Admin
     {
       email: 'danitugas48@gmail.com',
-      password_hash: hashAdmin,
+      password: hashAdmin,
       nama: 'Dani (Super Admin)',
       role: 'superadmin',
       bo_id: null,

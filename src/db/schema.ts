@@ -121,11 +121,11 @@ export const targetPenjualanDetail = pgTable('target_penjualan_detail', {
   index('idx_target_detail_bo_tahun').on(table.bo_id, table.tahun_anggaran),
 ]);
 
-// 7. APP USERS (SUPERADMIN & BRANCH MANAGERS DENGAN PASSWORD HASH)
+// 7. APP USERS (SUPERADMIN & BRANCH MANAGERS)
 export const appUsers = pgTable('app_users', {
   id: uuid('id').defaultRandom().primaryKey(),
   email: text('email').notNull().unique(),
-  password_hash: text('password_hash').notNull(),
+  password: text('password').notNull(),
   nama: text('nama').notNull(),
   role: text('role').default('branch_manager').notNull(), // 'superadmin' | 'branch_manager'
   bo_id: uuid('bo_id').references(() => masterBo.id, { onDelete: 'set null' }),

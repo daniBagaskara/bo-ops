@@ -65,7 +65,7 @@ userRouter.post('/', async (req: AuthRequest, res) => {
       .values({
         email: cleanEmail,
         nama: nama.trim(),
-        password_hash: hash,
+        password: hash,
         role,
         bo_id: role === 'branch_manager' ? bo_id : null,
         status_aktif: true,
@@ -141,7 +141,7 @@ userRouter.put('/:id/reset-password', async (req: AuthRequest, res) => {
     const updated = await db
       .update(appUsers)
       .set({
-        password_hash: hash,
+        password: hash,
         updated_at: new Date(),
       })
       .where(eq(appUsers.id, id))

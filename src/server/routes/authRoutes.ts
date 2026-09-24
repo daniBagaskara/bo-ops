@@ -1,7 +1,5 @@
 import { Router } from 'express';
-import { db, createPool } from '../../db/index.ts';
-import { appUsers, masterBo } from '../../db/schema.ts';
-import { eq } from 'drizzle-orm';
+import { createPool } from '../../db/index.ts';
 import bcrypt from 'bcryptjs';
 import {
   AuthRequest,
@@ -23,12 +21,10 @@ authRouter.post('/login', async (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    // Query directly from PostgreSQL database pool
+    // Query user by email from PostgreSQL pool (supports both password and password_hash columns)
     const pool = createPool();
     const userRes = await pool.query(
-      `SELECT u.id, u.email, 
-              COALESCE(u.password_hash, u.password) AS password_hash,
-              u.nama, u.role, u.bo_id, u.status_aktif, b.nama_bo
+      `SELECT u.id, u.email, u.password, u.nama, u.role, u.bo_id, u.status_aktif, b.nama_bo
        FROM app_users u
        LEFT JOIN master_bo b ON u.bo_id = b.id
        WHERE LOWER(u.email) = $1
@@ -48,36 +44,26 @@ authRouter.post('/login', async (req, res) => {
     }
 
     // Verify password:
-    // 1. Check bcrypt hash
-    // 2. Or check direct plaintext match (if account was seeded/registered as plaintext)
+    // 1. Plaintext match (e.g. 'admin123')
+    // 2. Or bcrypt hash match
     let isPasswordValid = false;
-    const storedSecret = user.password_hash || '';
+    const storedSecret = user.password || '';
 
-    if (storedSecret.startsWith('$2a$') || storedSecret.startsWith('$2b$') || storedSecret.startsWith('$2y$')) {
+    if (
+      storedSecret.startsWith('$2a$') ||
+      storedSecret.startsWith('$2b$') ||
+      storedSecret.startsWith('$2y$')
+    ) {
       isPasswordValid = await bcrypt.compare(cleanPassword, storedSecret);
     } else {
-      isPasswordValid = (cleanPassword === storedSecret);
-      // Auto-upgrade plaintext to bcrypt hash
-      if (isPasswordValid) {
-        try {
-          const newHash = await bcrypt.hash(cleanPassword, 10);
-          await pool.query(
-            `UPDATE app_users 
-             SET password_hash = $1 
-             WHERE id = $2`,
-            [newHash, user.id]
-          );
-        } catch {
-          // ignore auto-upgrade fail
-        }
-      }
+      isPasswordValid = cleanPassword === storedSecret;
     }
 
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Email atau kata sandi tidak sesuai.' });
     }
 
-    // Generate JWT token
+    // Generate stateless JWT token
     const token = createSessionToken({
       id: user.id,
       email: user.email,
