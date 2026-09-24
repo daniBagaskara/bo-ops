@@ -1,5 +1,16 @@
 export type UserRole = 'superadmin' | 'branch_manager';
 
+export type ActiveTab =
+  | 'dashboard'
+  | 'bo'
+  | 'sdm'
+  | 'relasi'
+  | 'produk'
+  | 'produk_harga'
+  | 'target_list'
+  | 'target'
+  | 'sql_migration';
+
 export interface UserProfile {
   id: string;
   nama: string;
@@ -111,4 +122,68 @@ export interface CalculationResult {
   marginPersen: number;
 }
 
-export type ActiveTab = 'dashboard' | 'target_input' | 'target_list' | 'sdm' | 'relasi' | 'produk_harga' | 'sql_migration';
+export interface AppUser {
+  id: string;
+  email: string;
+  nama: string;
+  role: UserRole;
+  bo_id?: string | null;
+  bo_nama?: string;
+  status_aktif: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type AppNavKey =
+  | 'dashboard_overview'
+  | 'master_bo'
+  | 'master_sdm'
+  | 'master_relasi'
+  | 'master_produk'
+  | 'master_harga'
+  | 'target_operasional'
+  | 'manajemen_user';
+
+export interface PaginationParams {
+  page: number;
+  pageSize: number;
+  search?: string;
+  boIdFilter?: string;
+  sortBy?: string;
+  sortAsc?: boolean;
+}
+
+export interface PaginatedResult<T> {
+  data: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export type ImportMode = 'insert' | 'upsert';
+
+export type ImportTableType =
+  | 'master_bo'
+  | 'master_sdm'
+  | 'master_relasi'
+  | 'master_produk'
+  | 'master_harga'
+  | 'target_detail';
+
+export interface ImportRowError {
+  rowNumber: number;
+  identifier: string;
+  reason: string;
+  dataSnippet?: Record<string, any>;
+}
+
+export interface ImportJobReport {
+  tableName: ImportTableType;
+  totalRows: number;
+  successCount: number;
+  failedCount: number;
+  durationMs: number;
+  errors: ImportRowError[];
+}
+

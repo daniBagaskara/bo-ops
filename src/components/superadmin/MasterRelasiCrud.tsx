@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { MasterRelasi, MasterBO, JenisRelasi, JenjangPendidikan } from '../../types';
+import { ImportDataModal } from '../modals/ImportDataModal';
 import {
   Plus,
   Search,
@@ -11,6 +12,7 @@ import {
   Check,
   RefreshCw,
   Percent,
+  Upload,
 } from 'lucide-react';
 
 interface MasterRelasiCrudProps {
@@ -19,6 +21,7 @@ interface MasterRelasiCrudProps {
   onAdd: (data: Omit<MasterRelasi, 'id'>) => Promise<void>;
   onUpdate: (id: string, data: Partial<MasterRelasi>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onRefresh?: () => void;
   isLoading: boolean;
 }
 
@@ -46,12 +49,14 @@ export const MasterRelasiCrud: React.FC<MasterRelasiCrudProps> = ({
   onAdd,
   onUpdate,
   onDelete,
+  onRefresh,
   isLoading,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBoFilter, setSelectedBoFilter] = useState('ALL');
   const [selectedJenisFilter, setSelectedJenisFilter] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MasterRelasi | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -217,6 +222,15 @@ export const MasterRelasiCrud: React.FC<MasterRelasiCrudProps> = ({
               className="pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-40 sm:w-48"
             />
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIsImportModalOpen(true)}
+            className="inline-flex items-center px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-medium rounded-lg shadow-2xs transition-colors"
+          >
+            <Upload className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
+            Impor
+          </button>
 
           <button
             type="button"
@@ -514,6 +528,17 @@ export const MasterRelasiCrud: React.FC<MasterRelasiCrudProps> = ({
           </div>
         </div>
       )}
+
+      {/* Import Modal */}
+      <ImportDataModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        tableType="master_relasi"
+        onImportSuccess={() => {
+          onRefresh?.();
+          setIsImportModalOpen(false);
+        }}
+      />
     </div>
   );
 };
