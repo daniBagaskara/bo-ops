@@ -77,7 +77,10 @@ authRouter.post('/login', async (req, res) => {
     });
   } catch (error: any) {
     console.error('Login error:', error);
-    return res.status(500).json({ error: 'Terjadi kesalahan pada server saat autentikasi.' });
+    return res.status(500).json({
+      error: 'Terjadi kesalahan pada server saat autentikasi.',
+      detail: error.message || String(error),
+    });
   }
 });
 
