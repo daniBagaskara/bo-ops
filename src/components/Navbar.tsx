@@ -39,7 +39,7 @@ export const Navbar: React.FC<Props> = ({ onOpenTargetWizard }) => {
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const [isBoDropdownOpen, setIsBoDropdownOpen] = useState(false);
 
-  const isSuperadmin = currentUser.role === 'superadmin';
+  const isSuperadmin = currentUser?.role === 'superadmin';
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200">
@@ -232,14 +232,14 @@ export const Navbar: React.FC<Props> = ({ onOpenTargetWizard }) => {
               className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 text-xs rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors"
             >
               <div className="w-6 h-6 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                {currentUser.role === 'superadmin' ? 'SA' : 'BM'}
+                {currentUser?.role === 'superadmin' ? 'SA' : 'BM'}
               </div>
               <div className="text-left hidden md:block">
                 <div className="text-[11px] font-semibold text-slate-800 leading-tight">
-                  {currentUser.role === 'superadmin' ? 'Superadmin' : 'Branch Manager'}
+                  {currentUser?.role === 'superadmin' ? 'Superadmin' : 'Branch Manager'}
                 </div>
                 <div className="text-[10px] text-slate-500 leading-tight">
-                  {currentUser.role === 'superadmin' ? 'Akses Nasional' : currentUser.assigned_bo_nama?.split(' ')[2] || 'Cabang'}
+                  {currentUser?.role === 'superadmin' ? 'Akses Nasional' : currentUser?.assigned_bo_nama?.split(' ')[2] || 'Cabang'}
                 </div>
               </div>
               <ChevronDown className="w-3 h-3 text-slate-400" />
@@ -261,7 +261,7 @@ export const Navbar: React.FC<Props> = ({ onOpenTargetWizard }) => {
 
                 <div className="space-y-1">
                   {availableUsers.map((user) => {
-                    const isSelected = user.id === currentUser.id;
+                    const isSelected = user.id === currentUser?.id;
                     return (
                       <button
                         key={user.id}

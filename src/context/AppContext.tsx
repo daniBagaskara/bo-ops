@@ -31,8 +31,9 @@ interface ToastInfo {
 }
 
 interface AppContextType {
-  currentUser: UserProfile;
-  setCurrentUser: (user: UserProfile) => void;
+  currentUser: UserProfile | null;
+  setCurrentUser: (user: UserProfile | null) => void;
+  logout: () => void;
   availableUsers: UserProfile[];
 
   activeTab: ActiveTab;
@@ -100,7 +101,7 @@ const STORAGE_KEY_PREFIX = 'edubranch_app_data_v1_';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // 1. Current user
-  const [currentUser, setCurrentUser] = useState<UserProfile>(() => {
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY_PREFIX}user`);
     if (saved) {
       try {
@@ -109,7 +110,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // fallback
       }
     }
-    return INITIAL_USERS[0]; // Default: Superadmin
+    return null; // Start at Auth Page or user can choose role
   });
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -117,23 +118,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Active BO
   const [activeBoId, setActiveBoIdState] = useState<string>(() => {
-    return currentUser.role === 'branch_manager' && currentUser.assigned_bo_id
+    return currentUser?.role === 'branch_manager' && currentUser.assigned_bo_id
       ? currentUser.assigned_bo_id
-      : 'bo-sby-001';
+      : 'b0000000-0000-0000-0000-000000000001';
   });
 
   // When user role changes, enforce BM BO assignment
-  const handleSetCurrentUser = (user: UserProfile) => {
+  const handleSetCurrentUser = (user: UserProfile | null) => {
     setCurrentUser(user);
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}user`, JSON.stringify(user));
-    if (user.role === 'branch_manager' && user.assigned_bo_id) {
-      setActiveBoIdState(user.assigned_bo_id);
+    if (user) {
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}user`, JSON.stringify(user));
+      if (user.role === 'branch_manager' && user.assigned_bo_id) {
+        setActiveBoIdState(user.assigned_bo_id);
+      }
+      showToast('info', 'Login Berhasil', `Sekarang masuk sebagai: ${user.nama} (${user.role === 'superadmin' ? 'Superadmin' : 'Branch Manager'})`);
+    } else {
+      localStorage.removeItem(`${STORAGE_KEY_PREFIX}user`);
+      showToast('info', 'Keluar', 'Anda telah keluar dari sistem.');
     }
-    showToast('info', 'Beralih Akun', `Sekarang login sebagai: ${user.nama} (${user.role === 'superadmin' ? 'Superadmin' : 'Branch Manager'})`);
+  };
+
+  const logout = () => {
+    handleSetCurrentUser(null);
   };
 
   const setActiveBoId = (boId: string) => {
-    if (currentUser.role === 'branch_manager' && currentUser.assigned_bo_id && currentUser.assigned_bo_id !== boId) {
+    if (currentUser?.role === 'branch_manager' && currentUser.assigned_bo_id && currentUser.assigned_bo_id !== boId) {
       showToast('warning', 'Akses Terbatas', 'Branch Manager hanya dapat mengelola Branch Office yang ditugaskan.');
       return;
     }
@@ -442,6 +452,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       value={{
         currentUser,
         setCurrentUser: handleSetCurrentUser,
+        logout,
         availableUsers: INITIAL_USERS,
 
         activeTab,
