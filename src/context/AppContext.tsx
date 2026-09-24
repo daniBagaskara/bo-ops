@@ -109,8 +109,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Check current session on mount
+  // Check current session on mount and listen to auth events
   useEffect(() => {
+    const handleUnauthorized = () => {
+      setCurrentUser(null);
+      showToast('warning', 'Sesi Kedaluwarsa', 'Silakan masuk kembali untuk melanjutkan.');
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+
     const initAuth = async () => {
       setIsLoadingUser(true);
       try {
@@ -122,14 +129,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
       } catch {
-        // Not logged in or expired
+        // Not logged in, invalid token, or expired -> eject to Login Page
         setCurrentUser(null);
       } finally {
         setIsLoadingUser(false);
       }
     };
     initAuth();
-  }, []);
+
+    return () => {
+      window.removeEventListener('auth:unauthorized', handleUnauthorized);
+    };
+  }, [showToast]);
 
   // Refresh all application data from backend
   const refreshData = useCallback(async () => {

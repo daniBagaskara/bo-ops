@@ -15,26 +15,33 @@ import { supabaseService } from './supabaseService';
 const TOKEN_KEY = 'bo_ops_jwt_token';
 const USER_KEY = 'bo_ops_user_profile';
 
-function getToken(): string | null {
+export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
-function setSession(token: string, user: UserProfile) {
+export function setSession(token: string, user: UserProfile) {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
 }
 
-function clearSession() {
+export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
 }
 
-// Resilient API Fetch Helper with Auto-Fallback to Direct Supabase if Backend DB config not populated
+// Resilient API Fetch Helper with Auto-Redirect on 401/403
 async function backendFetch<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<{ data: T | null; error: string | null; fallbackToSupabase?: boolean }> {
   const token = getToken();
+
+  // If no token exists at all and endpoint is protected, reject immediately
+  if (!token && !endpoint.includes('/api/auth/login')) {
+    clearSession();
+    return { data: null, error: 'Sesi tidak ditemukan. Silakan login terlebih dahulu.' };
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
@@ -46,8 +53,20 @@ async function backendFetch<T>(
 
   try {
     const res = await fetch(endpoint, { ...options, headers });
+
+    // Handle 401 Unauthorized / 403 Forbidden: Clear stale session & trigger re-auth
+    if (res.status === 401 || res.status === 403) {
+      const errorJson = await res.json().catch(() => ({}));
+      clearSession();
+      // Dispatch custom event so React AppContext immediately ejects to Login Screen
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+      return {
+        data: null,
+        error: errorJson.error || 'Sesi telah kedaluwarsa atau tidak memiliki izin akses.',
+      };
+    }
     
-    // Check if backend database error (e.g. SQL_HOST not set on Vercel yet)
+    // Check if backend database error (e.g. cold-start or DB config error)
     if (res.status === 500) {
       const errorJson = await res.json().catch(() => ({}));
       if (
@@ -69,7 +88,6 @@ async function backendFetch<T>(
     const data = await res.json();
     return { data, error: null };
   } catch (err: any) {
-    // Network offline or failed to reach Express API
     return { data: null, error: err.message, fallbackToSupabase: true };
   }
 }
@@ -123,6 +141,9 @@ export const apiService = {
   },
 
   getCurrentUser(): UserProfile | null {
+    const token = getToken();
+    if (!token) return null;
+
     const stored = localStorage.getItem(USER_KEY);
     if (stored) {
       try {
@@ -131,24 +152,32 @@ export const apiService = {
         // ignore
       }
     }
-    return supabaseService.getCurrentUser();
+    return null;
   },
 
   async getMe(): Promise<{ user: UserProfile }> {
-    const cached = this.getCurrentUser();
-    if (cached) return { user: cached };
-
     const token = getToken();
-    if (token && token !== 'supabase-session') {
+    if (!token) {
+      clearSession();
+      throw new Error('Sesi tidak ditemukan.');
+    }
+
+    // Always verify token against backend
+    if (token !== 'supabase-session') {
       const { data, error } = await backendFetch<{ user: UserProfile }>('/api/auth/me');
       if (data && data.user) {
         localStorage.setItem(USER_KEY, JSON.stringify(data.user));
         return { user: data.user };
       }
+      clearSession();
+      throw new Error(error || 'Sesi telah kedaluwarsa.');
     }
 
     const user = supabaseService.getCurrentUser();
-    if (!user) throw new Error('Sesi tidak ditemukan.');
+    if (!user) {
+      clearSession();
+      throw new Error('Sesi tidak ditemukan.');
+    }
     return { user };
   },
 
@@ -165,6 +194,7 @@ export const apiService = {
     }
     clearSession();
     supabaseService.logout();
+    window.dispatchEvent(new CustomEvent('auth:unauthorized'));
   },
 
   // 2. Master BO APIs
